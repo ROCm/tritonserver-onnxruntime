@@ -78,19 +78,45 @@ project(tritononnxruntimebackend LANGUAGES C CXX)
 #     version that is compatible with the specified version of ONNX
 #     Runtime.
 #
+#   - Optionally set TRITON_BUILD_TARGET_PLATFORM to either linux, windows or
+#     igpu. If not set, the current platform will be used. If building on
+#     Jetpack, always set to igpu to avoid misdetection.
+#
+#   - If you want ROCm support set
+#     TRITON_ENABLE_ONNXRUNTIME_ROCM=ON and set
+#     TRITON_BUILD_ONNXRUNTIME_ROCM_VERSION to the ROCm stack
+#     version that is compatible with the specified version of ONNX
+#     Runtime.
+#
+#   - If you want MIGraphX support set
+#     TRITON_ENABLE_ONNXRUNTIME_MIGRAPHX=ON and set
+#     TRITON_BUILD_ONNXRUNTIME_MIGRAPHX_VERSION to the MIGraphX
+#     version that is compatible with the specified version of ONNX
+#     Runtime. Requires that ROCm Support also be set
+#
 #   - If you want to disable GPU usage, set TRITON_ENABLE_GPU=OFF.
 #    This will make builds with CUDA and TensorRT flags to fail.
 #
 option(TRITON_ENABLE_GPU "Enable GPU support in backend" ON)
+option(TRITON_ENABLE_ROCM "Enable AMD GPU support in backend" ON)
 option(TRITON_ENABLE_STATS "Include statistics collections in backend" ON)
 option(TRITON_ENABLE_ONNXRUNTIME_TENSORRT
   "Enable TensorRT execution provider for ONNXRuntime backend in server" OFF)
+option(TRITON_ENABLE_ONNXRUNTIME_ROCM
+  "Enable ROCm execution provider for ONNXRuntime backend in server" OFF)
+option(TRITON_ENABLE_ONNXRUNTIME_MIGRAPHX
+  "Enable MIGraphX execution provider for ONNXRuntime backend in server" OFF)
 option(TRITON_ENABLE_ONNXRUNTIME_OPENVINO
   "Enable OpenVINO execution provider for ONNXRuntime backend in server" OFF)
+set(TRITON_BUILD_ROCM_VERSION "" CACHE STRING "Version of ROCm install")
+set(TRITON_BUILD_ROCM_HOME "" CACHE PATH "Path to ROCm install")
+set(TRITON_BUILD_MIGRAPHX_VERSION "" CACHE STRING "Version of MIGraphX install")
+set(TRITON_BUILD_MIGRAPHX_HOME "" CACHE PATH "Path to MIGraphX install")
 set(TRITON_BUILD_CONTAINER "" CACHE STRING "Triton container to use a base for build")
 set(TRITON_BUILD_CONTAINER_VERSION "" CACHE STRING "Triton container version to target")
 set(TRITON_BUILD_ONNXRUNTIME_VERSION "" CACHE STRING "ONNXRuntime version to build")
 set(TRITON_BUILD_ONNXRUNTIME_OPENVINO_VERSION "" CACHE STRING "ONNXRuntime OpenVINO version to build")
+set(TRITON_BUILD_TARGET_PLATFORM "" CACHE STRING "Target platform for ONNXRuntime build")
 set(TRITON_BUILD_CUDA_VERSION "" CACHE STRING "Version of CUDA install")
 set(TRITON_BUILD_CUDA_HOME "" CACHE PATH "Path to CUDA install")
 set(TRITON_BUILD_CUDNN_HOME "" CACHE PATH "Path to CUDNN install")
@@ -100,8 +126,8 @@ set(TRITON_ONNX_TENSORRT_REPO_TAG "" CACHE STRING "Tag for onnx-tensorrt repo")
 set(TRT_VERSION "" CACHE STRING "TRT version for this build.")
 set(TRITON_ONNXRUNTIME_LIB_PATHS "" CACHE PATH "Paths to ONNXRuntime libraries")
 
-set(TRITON_BACKEND_REPO_TAG "main" CACHE STRING "Tag for triton-inference-server/backend repo")
-set(TRITON_CORE_REPO_TAG "main" CACHE STRING "Tag for triton-inference-server/core repo")
+set(TRITON_BACKEND_REPO_TAG "add_migraphx_rocm_eps_hipify" CACHE STRING "Tag for triton-inference-server/backend repo")
+set(TRITON_CORE_REPO_TAG "add_migraphx_rocm_eps_hipify" CACHE STRING "Tag for triton-inference-server/core repo")
 set(TRITON_COMMON_REPO_TAG "main" CACHE STRING "Tag for triton-inference-server/common repo")
 
 if (WIN32)
@@ -116,6 +142,12 @@ if (NOT TRITON_ENABLE_GPU)
     message(FATAL_ERROR "TRITON_ENABLE_ONNXRUNTIME_TENSORRT=ON requires TRITON_ENABLE_GPU=ON")
   endif() # TRITON_ENABLE_ONNXRUNTIME_TENSORRT
 endif() # NOT TRITON_ENABLE_GPU
+
+if (NOT TRITON_ENABLE_ROCM)
+  if (TRITON_ENABLE_ONNXRUNTIME_MIGRAPHX)
+    message(FATAL_ERROR "TRITON_ENABLE_ONNXRUNTIME_MIGRAPHX=ON requires TRITON_ENABLE_ROCM=ON")
+  endif() # TRITON_ENABLE_ONNXRUNTIME_MIGRAPHX
+endif() # NOT TRITON_ENABLE_ROCM
 
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
@@ -143,13 +175,19 @@ else()
       "TRITON_BUILD_ONNXRUNTIME_VERSION requires TRITON_BUILD_CONTAINER or TRITON_BUILD_CONTAINER_VERSION")
   endif()
 
-  if(NOT TRITON_BUILD_CONTAINER)
-    set(TRITON_BUILD_CONTAINER "nvcr.io/nvidia/tritonserver:${TRITON_BUILD_CONTAINER_VERSION}-py3-min")
-  endif()
-
   set(TRITON_ONNXRUNTIME_DOCKER_IMAGE "tritonserver_onnxruntime")
   set(TRITON_ONNXRUNTIME_DOCKER_MEMORY "8g")
   set(TRITON_ONNXRUNTIME_INCLUDE_PATHS "${CMAKE_CURRENT_BINARY_DIR}/onnxruntime/include")
+
+  if(NOT TRITON_BUILD_CONTAINER)
+    if (TRITON_ENABLE_ROCM)
+      set(TRITON_BUILD_CONTAINER "rocm/pytorch:rocm6.0.2_ubuntu22.04_py3.10_pytorch_2.1.2")
+      set(TRITON_ONNXRUNTIME_INCLUDE_PATHS ${TRITON_ONNXRUNTIME_INCLUDE_PATHS} /opt/rocm/include/hip /tmp/tritonbuild/onnxruntime_backend/build/onnxruntime/include)
+    else()
+      set(TRITON_BUILD_CONTAINER "nvcr.io/nvidia/tritonserver:${TRITON_BUILD_CONTAINER_VERSION}-py3-min")
+    endif()
+  endif()
+
   set(TRITON_ONNXRUNTIME_LIB_PATHS "${CMAKE_CURRENT_BINARY_DIR}/onnxruntime/lib")
   if (WIN32)
     set(ONNXRUNTIME_LIBRARY "onnxruntime")
@@ -177,13 +215,14 @@ FetchContent_Declare(
 )
 FetchContent_Declare(
   repo-core
-  GIT_REPOSITORY https://github.com/triton-inference-server/core.git
+  # GIT_REPOSITORY https://github.com/triton-inference-server/core.git
+  GIT_REPOSITORY https://github.com/AMD-AI/tritonserver-core.git
   GIT_TAG ${TRITON_CORE_REPO_TAG}
   GIT_SHALLOW ON
 )
 FetchContent_Declare(
   repo-backend
-  GIT_REPOSITORY https://github.com/triton-inference-server/backend.git
+  GIT_REPOSITORY https://github.com/AMD-AI/tritonserver_backend.git
   GIT_TAG ${TRITON_BACKEND_REPO_TAG}
   GIT_SHALLOW ON
 )
@@ -195,6 +234,13 @@ FetchContent_MakeAvailable(repo-common repo-core repo-backend)
 if(${TRITON_ENABLE_GPU})
   find_package(CUDAToolkit REQUIRED)
 endif() # TRITON_ENABLE_GPU
+
+#
+# ROCM
+#
+if(${TRITON_ENABLE_ROCM})
+  find_package(hip REQUIRED)
+endif() # TRITON_ENABLE_ROCM
 
 #
 # Shared library implementing the Triton Backend API
@@ -229,6 +275,13 @@ target_compile_options(
   $<$<CXX_COMPILER_ID:MSVC>:/Wall /D_WIN32_WINNT=0x0A00 /EHsc /Zc:preprocessor>
 )
 
+if(${TRITON_ENABLE_ROCM})
+  target_compile_definitions(
+    triton-onnxruntime-backend
+    PRIVATE TRITON_ENABLE_ROCM=1
+  )
+endif() # TRITON_ENABLE_ROCM
+
 if(${TRITON_ENABLE_GPU})
   target_compile_definitions(
     triton-onnxruntime-backend
@@ -247,6 +300,20 @@ if(${TRITON_ENABLE_ONNXRUNTIME_OPENVINO})
     PRIVATE TRITON_ENABLE_ONNXRUNTIME_OPENVINO=1
   )
 endif() # TRITON_ENABLE_ONNXRUNTIME_OPENVINO
+
+if(${TRITON_ENABLE_ONNXRUNTIME_ROCM})
+  target_compile_definitions(
+    triton-onnxruntime-backend
+    PRIVATE TRITON_ENABLE_ONNXRUNTIME_ROCM=1
+  )
+endif() # TRITON_ENABLE_ONNXRUNTIME_MIGRAPHX
+
+if(${TRITON_ENABLE_ONNXRUNTIME_MIGRAPHX})
+  target_compile_definitions(
+    triton-onnxruntime-backend
+    PRIVATE TRITON_ENABLE_ONNXRUNTIME_MIGRAPHX=1
+  )
+endif() # TRITON_ENABLE_ONNXRUNTIME_MIGRAPHX
 
 if (WIN32)
 set_target_properties(
@@ -300,6 +367,14 @@ if(${TRITON_ENABLE_GPU})
   )
 endif() # TRITON_ENABLE_GPU
 
+if(${TRITON_ENABLE_ROCM})
+  target_link_libraries(
+    triton-onnxruntime-backend
+    PRIVATE
+      hip::host
+  )
+endif() #TRITON_ENABLE_ROCM
+
 if(${TRITON_ENABLE_ONNXRUNTIME_OPENVINO})
   target_link_libraries(
     triton-onnxruntime-backend
@@ -313,6 +388,9 @@ endif() # TRITON_ENABLE_ONNXRUNTIME_OPENVINO
 #
 if(TRITON_ONNXRUNTIME_DOCKER_BUILD)
   set(_GEN_FLAGS "")
+  if(NOT ${TRITON_BUILD_TARGET_PLATFORM} STREQUAL "")
+    set(_GEN_FLAGS ${_GEN_FLAGS} "--target-platform=${TRITON_BUILD_TARGET_PLATFORM}")
+  endif() # TRITON_BUILD_TARGET_PLATFORM
   if(NOT ${TRITON_BUILD_CUDA_VERSION} STREQUAL "")
     set(_GEN_FLAGS ${_GEN_FLAGS} "--cuda-version=${TRITON_BUILD_CUDA_VERSION}")
   endif() # TRITON_BUILD_CUDA_VERSION
@@ -326,11 +404,29 @@ if(TRITON_ONNXRUNTIME_DOCKER_BUILD)
     set(_GEN_FLAGS ${_GEN_FLAGS} "--tensorrt-home=${TRITON_BUILD_TENSORRT_HOME}")
   endif() # TRITON_BUILD_TENSORRT_HOME
   if(${TRITON_ENABLE_ONNXRUNTIME_TENSORRT})
-    set(_GEN_FLAGS ${_GEN_FLAGS} "--ort-tensorrt")
+    set(_GEN_FLAGS ${_GEN_FLAGS} "--ort-tensorrt --trt-version=${TRT_VERSION} --onnx-tensorrt-tag=${TRITON_ONNX_TENSORRT_REPO_TAG}")
   endif() # TRITON_ENABLE_ONNXRUNTIME_TENSORRT
   if(${TRITON_ENABLE_ONNXRUNTIME_OPENVINO})
     set(_GEN_FLAGS ${_GEN_FLAGS} "--ort-openvino=${TRITON_BUILD_ONNXRUNTIME_OPENVINO_VERSION}")
   endif() # TRITON_ENABLE_ONNXRUNTIME_OPENVINO
+  if(NOT ${TRITON_BUILD_ROCM_VERSION} STREQUAL "")
+    set(_GEN_FLAGS ${_GEN_FLAGS} "--rocm-version=${TRITON_BUILD_ROCM_VERSION}")
+  endif() # TRITON_BUILD_ROCM_VERSION
+  if(NOT ${TRITON_BUILD_ROCM_HOME} STREQUAL "")
+    set(_GEN_FLAGS ${_GEN_FLAGS} "--migraphx-home=${TRITON_BUILD_ROCM_HOME}")
+  endif() # TRITON_BUILD_ROCM_HOME
+  if(${TRITON_ENABLE_ONNXRUNTIME_ROCM})
+    set(_GEN_FLAGS ${_GEN_FLAGS} "--enable-rocm")
+  endif() # TRITON_ENABLE_ONNXRUNTIME_ROCM
+  if(NOT ${TRITON_BUILD_MIGRAPHX_VERSION} STREQUAL "")
+    set(_GEN_FLAGS ${_GEN_FLAGS} "--migraphx-version=${TRITON_BUILD_MIGRAPHX_VERSION}")
+  endif() # TRITON_BUILD_MIGRAPHX_VERSION
+  if(NOT ${TRITON_BUILD_MIGRAPHX_HOME} STREQUAL "")
+    set(_GEN_FLAGS ${_GEN_FLAGS} "--migraphx-home=${TRITON_BUILD_MIGRAPHX_HOME}")
+  endif() # TRITON_BUILD_MIGRAPHX_HOME
+  if(${TRITON_ENABLE_ONNXRUNTIME_MIGRAPHX})
+    set(_GEN_FLAGS ${_GEN_FLAGS} "--ort-migraphx")
+  endif() # TRITON_ENABLE_ONNXRUNTIME_MIGRAPHX
 
   set(ENABLE_GPU_EXTRA_ARGS "")
   if(${TRITON_ENABLE_GPU})
@@ -341,7 +437,7 @@ if(TRITON_ONNXRUNTIME_DOCKER_BUILD)
     add_custom_command(
       OUTPUT
         onnxruntime/lib/${ONNXRUNTIME_LIBRARY}
-      COMMAND python3 ${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_ort_dockerfile.py --triton-container="${TRITON_BUILD_CONTAINER}" --ort-version="${TRITON_BUILD_ONNXRUNTIME_VERSION}" --trt-version="${TRT_VERSION}" --onnx-tensorrt-tag="${TRITON_ONNX_TENSORRT_REPO_TAG}" ${_GEN_FLAGS} --output=Dockerfile.ort ${ENABLE_GPU_EXTRA_ARGS}
+      COMMAND python3 ${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_ort_dockerfile.py --triton-container="${TRITON_BUILD_CONTAINER}" --ort-version="${TRITON_BUILD_ONNXRUNTIME_VERSION}" ${_GEN_FLAGS} --output=Dockerfile.ort ${ENABLE_GPU_EXTRA_ARGS}
       COMMAND docker build --memory ${TRITON_ONNXRUNTIME_DOCKER_MEMORY} --cache-from=${TRITON_ONNXRUNTIME_DOCKER_IMAGE} --cache-from=${TRITON_ONNXRUNTIME_DOCKER_IMAGE}_cache0 --cache-from=${TRITON_ONNXRUNTIME_DOCKER_IMAGE}_cache1 -t ${TRITON_ONNXRUNTIME_DOCKER_IMAGE} -f ./Dockerfile.ort ${CMAKE_CURRENT_SOURCE_DIR}
       COMMAND powershell.exe -noprofile -c "docker rm onnxruntime_backend_ort > $null 2>&1; if ($LASTEXITCODE) { 'error ignored...' }; exit 0"
       COMMAND docker create --name onnxruntime_backend_ort ${TRITON_ONNXRUNTIME_DOCKER_IMAGE}
@@ -354,11 +450,14 @@ if(TRITON_ONNXRUNTIME_DOCKER_BUILD)
     add_custom_command(
       OUTPUT
         onnxruntime/lib/${ONNXRUNTIME_LIBRARY}
-      COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_ort_dockerfile.py  --ort-build-config="${CMAKE_BUILD_TYPE}" --triton-container="${TRITON_BUILD_CONTAINER}" --ort-version="${TRITON_BUILD_ONNXRUNTIME_VERSION}" --trt-version="${TRT_VERSION}" --onnx-tensorrt-tag="${TRITON_ONNX_TENSORRT_REPO_TAG}" ${_GEN_FLAGS} --output=Dockerfile.ort ${ENABLE_GPU_EXTRA_ARGS}
+      COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_ort_dockerfile.py  --ort-build-config="${CMAKE_BUILD_TYPE}" --triton-container="${TRITON_BUILD_CONTAINER}" --ort-version="${TRITON_BUILD_ONNXRUNTIME_VERSION}" ${_GEN_FLAGS} --output=Dockerfile.ort ${ENABLE_GPU_EXTRA_ARGS}
+      COMMAND cat Dockerfile.ort
       COMMAND docker build --cache-from=${TRITON_ONNXRUNTIME_DOCKER_IMAGE} --cache-from=${TRITON_ONNXRUNTIME_DOCKER_IMAGE}_cache0 --cache-from=${TRITON_ONNXRUNTIME_DOCKER_IMAGE}_cache1 -t ${TRITON_ONNXRUNTIME_DOCKER_IMAGE} -f ./Dockerfile.ort ${CMAKE_CURRENT_SOURCE_DIR}
       COMMAND docker rm onnxruntime_backend_ort || echo 'error ignored...' || true
       COMMAND docker create --name onnxruntime_backend_ort ${TRITON_ONNXRUNTIME_DOCKER_IMAGE}
       COMMAND rm -fr onnxruntime
+      COMMAND docker image list 
+      COMMAND docker ps
       COMMAND docker cp onnxruntime_backend_ort:/opt/onnxruntime onnxruntime
       COMMAND docker rm onnxruntime_backend_ort
       COMMENT "Building ONNX Runtime"
