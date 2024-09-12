@@ -544,7 +544,7 @@ RUN mkdir -p /opt/onnxruntime/test
 
         if FLAGS.enable_rocm:
             df += """
-    RUN sed -i 's/list(APPEND HIP_CLANG_FLAGS --amdgpu-target=gfx906 --amdgpu-target=gfx908)/list(APPEND HIP_CLANG_FLAGS --amdgpu-target=gfx906 --amdgpu-target=gfx908 --amdgpu-target=gfx1030)/g'  onnxruntime/cmake/onnxruntime_providers.cmake && \
+    RUN sed -i 's/list(APPEND HIP_CLANG_FLAGS --amdgpu-target=gfx906 --amdgpu-target=gfx908)/list(APPEND HIP_CLANG_FLAGS --amdgpu-target=gfx906 --amdgpu-target=gfx908 --amdgpu-target=gfx90a --amdgpu-target=gfx1030)/g'  onnxruntime/cmake/onnxruntime_providers.cmake && \
         sed -i 's/Version(torch.__version__) >= Version("1.11.0")/Version(torch.__version__).release >= Version("1.11.0").release/g' /workspace/onnxruntime/onnxruntime/python/tools/transformers/torch_onnx_export_helper.py; \
     RUN export PATH="/opt/cmake/bin:$PATH"
     RUN export CXXFLAGS="-D__HIP_PLATFORM_AMD__=1 -w"
