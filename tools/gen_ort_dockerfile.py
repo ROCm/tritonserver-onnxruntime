@@ -47,6 +47,8 @@ import os
 import platform
 import re
 
+print("===============================start to generate onnxruntime dockerfile===============================")
+
 FLAGS = None
 
 ORT_TO_TRTPARSER_VERSION_MAP = {
@@ -72,6 +74,7 @@ def dockerfile_common():
 ARG BASE_IMAGE={}
 ARG ONNXRUNTIME_VERSION={}
 ARG ONNXRUNTIME_REPO=https://github.com/microsoft/onnxruntime
+# ARG ONNXRUNTIME_REPO=https://github.com/ROCm/onnxruntime.git
 ARG ONNXRUNTIME_BUILD_CONFIG={}
 """.format(
         FLAGS.triton_container, FLAGS.ort_version, FLAGS.ort_build_config
@@ -124,7 +127,7 @@ RUN apt update -q=2 \\
     && . /etc/os-release \\
     && echo "deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] https://apt.kitware.com/ubuntu/ $UBUNTU_CODENAME main" | tee /etc/apt/sources.list.d/kitware.list >/dev/null \\
     && apt-get update -q=2 \\
-    && apt-get install -y --no-install-recommends cmake=3.27.7* cmake-data=3.27.7* \\
+    && apt-get install -y --no-install-recommends cmake=3.28* cmake-data=3.28* \\
     && cmake --version
 
 """
@@ -167,14 +170,22 @@ RUN apt-get update &&\
     apt-get install -y sudo git apt-utils bash build-essential curl doxygen gdb rocm-dev python3-dev python3-pip miopen-hip \
     rocblas half aria2 libnuma-dev pkg-config ccache software-properties-common wget libnuma-dev libssl-dev zlib1g-dev
 
-RUN aria2c -q -d /tmp -o cmake-3.27.3-linux-x86_64.tar.gz \
-https://github.com/Kitware/CMake/releases/download/v3.27.3/cmake-3.27.3-linux-x86_64.tar.gz &&\
-tar -zxf /tmp/cmake-3.27.3-linux-x86_64.tar.gz --strip=1 -C /usr
+RUN aria2c -q -d /tmp -o cmake-3.28.3-linux-x86_64.tar.gz \
+https://github.com/Kitware/CMake/releases/download/v3.28.3/cmake-3.28.3-linux-x86_64.tar.gz &&\
+tar -zxf /tmp/cmake-3.28.3-linux-x86_64.tar.gz -C /opt &&\
+ln -sf /opt/cmake-3.28.3-linux-x86_64/bin/cmake /usr/local/bin/cmake &&\
+ln -sf /opt/cmake-3.28.3-linux-x86_64/bin/ctest /usr/local/bin/ctest &&\
+ln -sf /opt/cmake-3.28.3-linux-x86_64/bin/cpack /usr/local/bin/cpack
 
 # Install rbuild
 RUN pip3 install https://github.com/RadeonOpenCompute/rbuild/archive/master.tar.gz numpy yapf==0.28.0 asciidoc CppHeaderParser setuptools wheel
 
-ENV PATH /opt/miniconda/bin:/code/cmake-3.27.3-linux-x86_64/bin:${PATH}
+ENV PATH /opt/cmake-3.28.3-linux-x86_64/bin:/opt/miniconda/bin:${PATH}
+# Remove conda cmake to avoid conflicts and verify our CMake version
+RUN mv /opt/conda/envs/py_3.10/bin/cmake /opt/conda/envs/py_3.10/bin/cmake.old || true && \
+    mv /opt/conda/envs/py_3.10/bin/ctest /opt/conda/envs/py_3.10/bin/ctest.old || true && \
+    cmake --version && which cmake && \
+    echo "CMake path verification:" && ls -la /opt/cmake-3.28.3-linux-x86_64/bin/cmake
 # Install rocm ep dependencies
 RUN apt-get update &&\
     apt-get install -y rocrand rccl rccl-dev hipsparse hipfft hipcub hipblas rocthrust hip-base rocm-device-libs hipify-clang miopen-hip-dev rocm-cmake
@@ -319,7 +330,7 @@ ENV PYTHONPATH $INTEL_OPENVINO_DIR/python/python3.10:$INTEL_OPENVINO_DIR/python/
         ep_flags = "--use_rocm"
         ep_flags += " --allow_running_as_root"
         df += """
-    RUN export PATH="/opt/cmake/bin:$PATH"
+    RUN export PATH="/opt/cmake-3.28.3-linux-x86_64/bin:$PATH"
     RUN export CXXFLAGS="-D__HIP_PLATFORM_AMD__=1 -w"
             """
         if FLAGS.rocm_version is not None:
@@ -339,7 +350,7 @@ ENV PYTHONPATH $INTEL_OPENVINO_DIR/python/python3.10:$INTEL_OPENVINO_DIR/python/
                 ep_flags += " --allow_running_as_root"
 
         if FLAGS.ort_openvino is not None:
-            ep_flags += " --use_openvino CPU_FP32"
+            ep_flags += " --use_openvino CPU"
 
     if target_platform() == "igpu":
         ep_flags += (
@@ -563,7 +574,7 @@ RUN mkdir -p /opt/onnxruntime/test
             df += """
     RUN sed -i 's/list(APPEND HIP_CLANG_FLAGS --amdgpu-target=gfx906 --amdgpu-target=gfx908)/list(APPEND HIP_CLANG_FLAGS --amdgpu-target=gfx906 --amdgpu-target=gfx908 --amdgpu-target=gfx90a --amdgpu-target=gfx1030)/g'  onnxruntime/cmake/onnxruntime_providers.cmake && \
         sed -i 's/Version(torch.__version__) >= Version("1.11.0")/Version(torch.__version__).release >= Version("1.11.0").release/g' /workspace/onnxruntime/onnxruntime/python/tools/transformers/torch_onnx_export_helper.py; \
-    RUN export PATH="/opt/cmake/bin:$PATH"
+    RUN export PATH="/opt/cmake-3.28.3-linux-x86_64/bin:$PATH"
     RUN export CXXFLAGS="-D__HIP_PLATFORM_AMD__=1 -w"
             """
             ep_flags = "--cmake_extra_defines CMAKE_HIP_COMPILER=/opt/rocm/llvm/bin/clang++ --use_rocm --skip_tests"
@@ -581,7 +592,7 @@ RUN mkdir -p /opt/onnxruntime/test
             ep_flags += " --allow_running_as_root"
 
         if FLAGS.ort_openvino is not None:
-            ep_flags += " --use_openvino CPU_FP32"
+            ep_flags += " --use_openvino CPU"
 
 
         df += """
