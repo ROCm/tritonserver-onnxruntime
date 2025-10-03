@@ -73,8 +73,8 @@ def dockerfile_common():
     df = """
 ARG BASE_IMAGE={}
 ARG ONNXRUNTIME_VERSION={}
-ARG ONNXRUNTIME_REPO=https://github.com/microsoft/onnxruntime
-# ARG ONNXRUNTIME_REPO=https://github.com/ROCm/onnxruntime.git
+# ARG ONNXRUNTIME_REPO=https://github.com/microsoft/onnxruntime
+ARG ONNXRUNTIME_REPO=https://github.com/ROCm/onnxruntime.git
 ARG ONNXRUNTIME_BUILD_CONFIG={}
 """.format(
         FLAGS.triton_container, FLAGS.ort_version, FLAGS.ort_build_config
@@ -209,6 +209,12 @@ RUN ldconfig
 
 RUN mkdir /migraphx
 RUN cd /migraphx && git clone --depth=1 --branch ${MIGRAPHX_VERSION} https://github.com/ROCm/AMDMIGraphX src && cd src && rbuild package --cxx /opt/rocm/llvm/bin/clang++ -d /migraphx/deps -B /migraphx/build -DPYTHON_EXECUTABLE=/usr/bin/python3 -DBUILD_DEV=On -DGPU_TARGETS=${GPU_TARGETS} && dpkg -i /migraphx/build/*.deb
+
+# Verify MIGraphX installation
+RUN ls -la /opt/rocm/lib/ | grep -i migraphx || echo "MIGraphX not found in /opt/rocm/lib/"
+RUN find /usr -name "*migraphx*" -type f 2>/dev/null | head -10 || echo "MIGraphX libraries not found in /usr"
+RUN ldconfig && ldconfig -p | grep migraphx || echo "MIGraphX not in library cache"
+
 # RUN cd / && rm -rf /migraphx
     """
 
@@ -719,10 +725,10 @@ def preprocess_gpu_flags():
 
         if FLAGS.enable_rocm:
             if FLAGS.rocm_home is None:
-                FLAGS.rocm_home = "/opt/rocm/"
+                FLAGS.rocm_home = "/opt/rocm"
 
             if FLAGS.migraphx_home is None:
-                FLAGS.migraphx_home = "/opt/rocm/"
+                FLAGS.migraphx_home = "/opt/rocm"
 
 
 
