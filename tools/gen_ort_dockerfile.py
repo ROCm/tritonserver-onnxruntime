@@ -328,7 +328,6 @@ ENV PYTHONPATH $INTEL_OPENVINO_DIR/python/python3.10:$INTEL_OPENVINO_DIR/python/
 
     if FLAGS.enable_rocm: 
         ep_flags = "--use_rocm"
-        ep_flags += " --allow_running_as_root"
         df += """
     RUN export PATH="/opt/cmake-3.28.3-linux-x86_64/bin:$PATH"
     RUN export CXXFLAGS="-D__HIP_PLATFORM_AMD__=1 -w"
@@ -343,11 +342,9 @@ ENV PYTHONPATH $INTEL_OPENVINO_DIR/python/python3.10:$INTEL_OPENVINO_DIR/python/
                 ep_flags += ' --migraphx_home "{}"'.format(FLAGS.migraphx_home)
         cmake_defs = "CMAKE_HIP_COMPILER"
         cuda_archs = "/opt/rocm/llvm/bin/clang++"
+        
+        # Add --allow_running_as_root only once
         ep_flags += " --allow_running_as_root"
-
-        if os.name == "posix":
-            if os.getuid() == 0:
-                ep_flags += " --allow_running_as_root"
 
         if FLAGS.ort_openvino is not None:
             ep_flags += " --use_openvino CPU"
