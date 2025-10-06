@@ -296,8 +296,7 @@ ENV PYTHONPATH $INTEL_OPENVINO_DIR/python/python3.10:$INTEL_OPENVINO_DIR/python/
     # Fix: Remove PyTorch import from build script (not needed for building ONNX Runtime)
     # The pytorch_export_helpers is only for users converting PyTorch models to ONNX
     # It's not needed for building the ONNX Runtime library or Triton backend
-    RUN sed -i '/from \.pytorch_export_helpers import infer_input_info/d' /workspace/onnxruntime/tools/python/util/__init__.py && \
-        echo "# PyTorch helpers disabled - not needed for ROCm/MIGraphX EP build" >> /workspace/onnxruntime/tools/python/util/__init__.py
+    RUN sed -i '/from \.pytorch_export_helpers import infer_input_info/c\    pass  # PyTorch helpers disabled - not needed for ROCm/MIGraphX EP build' /workspace/onnxruntime/tools/python/util/__init__.py
 
         """
 
