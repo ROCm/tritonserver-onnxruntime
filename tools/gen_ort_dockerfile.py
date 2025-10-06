@@ -189,6 +189,10 @@ RUN mv /opt/conda/envs/py_3.10/bin/cmake /opt/conda/envs/py_3.10/bin/cmake.old |
 # Install rocm ep dependencies
 RUN apt-get update &&\
     apt-get install -y rocrand rccl rccl-dev hipsparse hipfft hipcub hipblas rocthrust hip-base rocm-device-libs hipify-clang miopen-hip-dev rocm-cmake
+
+# Install magma library required by PyTorch (fixes libmagma.so missing error)
+RUN apt-get install -y hipmagma || \
+    (pip3 install --no-cache-dir torch-magma || echo "Warning: Could not install magma, continuing anyway")
 """
 
     if FLAGS.ort_migraphx:
@@ -286,8 +290,14 @@ ENV PYTHONPATH $INTEL_OPENVINO_DIR/python/python3.10:$INTEL_OPENVINO_DIR/python/
     ARG ONNXRUNTIME_REPO
     ARG ONNXRUNTIME_BUILD_CONFIG
 
-    run git clone -b ${ONNXRUNTIME_VERSION} --recursive ${ONNXRUNTIME_REPO} onnxruntime && \
+    RUN git clone -b ${ONNXRUNTIME_VERSION} --recursive ${ONNXRUNTIME_REPO} onnxruntime && \
         (cd onnxruntime && git submodule update --init --recursive)
+
+    # Fix: Remove PyTorch import from build script (not needed for building ONNX Runtime)
+    # The pytorch_export_helpers is only for users converting PyTorch models to ONNX
+    # It's not needed for building the ONNX Runtime library or Triton backend
+    RUN sed -i '/from \.pytorch_export_helpers import infer_input_info/d' /workspace/onnxruntime/tools/python/util/__init__.py && \
+        echo "# PyTorch helpers disabled - not needed for ROCm/MIGraphX EP build" >> /workspace/onnxruntime/tools/python/util/__init__.py
 
         """
 
