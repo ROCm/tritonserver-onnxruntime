@@ -211,6 +211,10 @@ RUN echo "/opt/rocm/lib" > /etc/ld.so.conf.d/rocm.conf
 RUN echo "/opt/rocm/llvm/lib" > /etc/ld.so.conf.d/rocm-llvm.conf
 RUN ldconfig
 
+# Remove old MIGraphX packages from base image to avoid conflicts
+RUN apt-get remove -y migraphx migraphx-dev libmigraphx-dev || true
+RUN apt-get autoremove -y || true
+
 RUN mkdir /migraphx
 RUN cd /migraphx && git clone --depth=1 --branch ${MIGRAPHX_VERSION} https://github.com/ROCm/AMDMIGraphX src && cd src && rbuild package --cxx /opt/rocm/llvm/bin/clang++ -d /migraphx/deps -B /migraphx/build -DPYTHON_EXECUTABLE=/usr/bin/python3 -DBUILD_DEV=On -DGPU_TARGETS=${GPU_TARGETS} && dpkg -i /migraphx/build/*.deb
 
@@ -218,6 +222,9 @@ RUN cd /migraphx && git clone --depth=1 --branch ${MIGRAPHX_VERSION} https://git
 RUN ls -la /opt/rocm/lib/ | grep -i migraphx || echo "MIGraphX not found in /opt/rocm/lib/"
 RUN find /usr -name "*migraphx*" -type f 2>/dev/null | head -10 || echo "MIGraphX libraries not found in /usr"
 RUN ldconfig && ldconfig -p | grep migraphx || echo "MIGraphX not in library cache"
+
+# Verify quantize_bf16 is available in the installed MIGraphX headers
+RUN grep -r "quantize_bf16" /opt/rocm/include/migraphx/ || grep -r "quantize_bf16" /usr/include/migraphx/ || echo "WARNING: quantize_bf16 not found in MIGraphX headers!"
 
 # RUN cd / && rm -rf /migraphx
     """
