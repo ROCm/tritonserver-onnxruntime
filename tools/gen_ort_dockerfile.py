@@ -224,7 +224,15 @@ RUN find /usr -name "*migraphx*" -type f 2>/dev/null | head -10 || echo "MIGraph
 RUN ldconfig && ldconfig -p | grep migraphx || echo "MIGraphX not in library cache"
 
 # Verify quantize_bf16 is available in the installed MIGraphX headers
-RUN grep -r "quantize_bf16" /opt/rocm/include/migraphx/ || grep -r "quantize_bf16" /usr/include/migraphx/ || echo "WARNING: quantize_bf16 not found in MIGraphX headers!"
+RUN echo "Checking for quantize_bf16 in MIGraphX headers:" && \
+    find /opt/rocm/include -name "*.hpp" -o -name "*.h" | xargs grep -l "quantize_bf16" || \
+    find /usr/include -name "*.hpp" -o -name "*.h" | xargs grep -l "quantize_bf16" || \
+    echo "WARNING: quantize_bf16 not found in MIGraphX headers!"
+
+# Set environment variable for MIGraphX include path
+ENV CPATH="/opt/rocm/include:${CPATH}"
+ENV C_INCLUDE_PATH="/opt/rocm/include:${C_INCLUDE_PATH}"
+ENV CPLUS_INCLUDE_PATH="/opt/rocm/include:${CPLUS_INCLUDE_PATH}"
 
 # RUN cd / && rm -rf /migraphx
     """
@@ -351,8 +359,8 @@ ENV PYTHONPATH $INTEL_OPENVINO_DIR/python/python3.10:$INTEL_OPENVINO_DIR/python/
     if FLAGS.enable_rocm: 
         ep_flags = "--use_rocm"
         df += """
-    RUN export PATH="/opt/cmake-3.28.3-linux-x86_64/bin:$PATH"
-    RUN export CXXFLAGS="-D__HIP_PLATFORM_AMD__=1 -w"
+    ENV PATH="/opt/cmake-3.28.3-linux-x86_64/bin:$PATH"
+    ENV CXXFLAGS="-D__HIP_PLATFORM_AMD__=1 -w"
             """
         if FLAGS.rocm_version is not None:
             ep_flags += ' --rocm_version "{}"'.format(FLAGS.rocm_version)
