@@ -313,6 +313,9 @@ ENV PYTHONPATH $INTEL_OPENVINO_DIR/python/python3.10:$INTEL_OPENVINO_DIR/python/
     # It's not needed for building the ONNX Runtime library or Triton backend
     RUN sed -i '/from \.pytorch_export_helpers import infer_input_info/c\    pass  # PyTorch helpers disabled - not needed for ROCm/MIGraphX EP build' /workspace/onnxruntime/tools/python/util/__init__.py
 
+    # Fix: Add missing migraphx/quantization.hpp include for quantize_bf16 function
+    RUN sed -i '/#include "core\/providers\/migraphx\/migraphx_stream_handle.h"/a #include <migraphx/quantization.hpp>' /workspace/onnxruntime/onnxruntime/core/providers/migraphx/migraphx_execution_provider.cc
+
         """
 
     else:
@@ -390,13 +393,19 @@ ENV PYTHONPATH $INTEL_OPENVINO_DIR/python/python3.10:$INTEL_OPENVINO_DIR/python/
     elif not FLAGS.enable_rocm:
         cuda_archs = "60;61;70;75;80;86;90"
 
+    # Add MIGraphX include path for ROCm builds
+    extra_cmake_defines = ""
+    if FLAGS.enable_rocm and FLAGS.ort_migraphx:
+        extra_cmake_defines = " CMAKE_CXX_FLAGS='-I/opt/rocm/include'"
+    
     df += """
     WORKDIR /workspace/onnxruntime
     ARG COMMON_BUILD_ARGS="--config ${{ONNXRUNTIME_BUILD_CONFIG}} --skip_submodule_sync --parallel --build_shared_lib \
-    --build_dir /workspace/build --cmake_extra_defines {}={} "
+    --build_dir /workspace/build --cmake_extra_defines {}={}{} "
     """.format(
             cmake_defs,
-            cuda_archs
+            cuda_archs,
+            extra_cmake_defines
         )
 
     df += """
