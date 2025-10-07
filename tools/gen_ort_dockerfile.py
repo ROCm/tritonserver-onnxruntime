@@ -375,8 +375,8 @@ ENV PYTHONPATH $INTEL_OPENVINO_DIR/python/python3.10:$INTEL_OPENVINO_DIR/python/
             if FLAGS.migraphx_home is not None:
                 ep_flags += ' --migraphx_home "{}"'.format(FLAGS.migraphx_home)
             else:
-                # Default to /opt/rocm where MIGraphX is installed
-                ep_flags += ' --migraphx_home "/opt/rocm"'
+                # Default to /opt/rocm/lib/migraphx where MIGraphX is installed
+                ep_flags += ' --migraphx_home "/opt/rocm/lib/migraphx"'
         cmake_defs = "CMAKE_HIP_COMPILER"
         cuda_archs = "/opt/rocm/llvm/bin/clang++"
         
@@ -398,12 +398,12 @@ ENV PYTHONPATH $INTEL_OPENVINO_DIR/python/python3.10:$INTEL_OPENVINO_DIR/python/
     # MIGraphX installs headers to /opt/rocm/lib/migraphx/include/
     extra_cmake_defines = ""
     if FLAGS.enable_rocm and FLAGS.ort_migraphx:
-        extra_cmake_defines = """ 'CMAKE_CXX_FLAGS=-I/opt/rocm/lib/migraphx/include -I/opt/rocm/include'"""
+        extra_cmake_defines = """ CMAKE_CXX_FLAGS=-I/opt/rocm/lib/migraphx/include"""
     
     df += """
     WORKDIR /workspace/onnxruntime
     ARG COMMON_BUILD_ARGS="--config ${{ONNXRUNTIME_BUILD_CONFIG}} --skip_submodule_sync --parallel --build_shared_lib \
-    --build_dir /workspace/build --cmake_extra_defines {}={}{}\"
+    --build_dir /workspace/build --cmake_extra_defines {}={}{} "
     """.format(
             cmake_defs,
             cuda_archs,
