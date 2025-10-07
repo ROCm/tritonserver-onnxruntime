@@ -362,6 +362,9 @@ ENV PYTHONPATH $INTEL_OPENVINO_DIR/python/python3.10:$INTEL_OPENVINO_DIR/python/
             ep_flags += " --use_migraphx"
             if FLAGS.migraphx_home is not None:
                 ep_flags += ' --migraphx_home "{}"'.format(FLAGS.migraphx_home)
+            else:
+                # Default to /opt/rocm where MIGraphX is installed
+                ep_flags += ' --migraphx_home "/opt/rocm"'
         cmake_defs = "CMAKE_HIP_COMPILER"
         cuda_archs = "/opt/rocm/llvm/bin/clang++"
         
