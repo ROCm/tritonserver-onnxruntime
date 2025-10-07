@@ -230,9 +230,10 @@ RUN echo "Checking for quantize_bf16 in MIGraphX headers:" && \
     echo "WARNING: quantize_bf16 not found in MIGraphX headers!"
 
 # Set environment variable for MIGraphX include path
-ENV CPATH="/opt/rocm/include:${CPATH}"
-ENV C_INCLUDE_PATH="/opt/rocm/include:${C_INCLUDE_PATH}"
-ENV CPLUS_INCLUDE_PATH="/opt/rocm/include:${CPLUS_INCLUDE_PATH}"
+# MIGraphX installs headers to /opt/rocm/lib/migraphx/include/ (non-standard location)
+ENV CPATH="/opt/rocm/lib/migraphx/include:/opt/rocm/include:${CPATH}"
+ENV C_INCLUDE_PATH="/opt/rocm/lib/migraphx/include:/opt/rocm/include:${C_INCLUDE_PATH}"
+ENV CPLUS_INCLUDE_PATH="/opt/rocm/lib/migraphx/include:/opt/rocm/include:${CPLUS_INCLUDE_PATH}"
 
 # RUN cd / && rm -rf /migraphx
     """
@@ -394,9 +395,10 @@ ENV PYTHONPATH $INTEL_OPENVINO_DIR/python/python3.10:$INTEL_OPENVINO_DIR/python/
         cuda_archs = "60;61;70;75;80;86;90"
 
     # Add MIGraphX include path for ROCm builds
+    # MIGraphX installs headers to /opt/rocm/lib/migraphx/include/
     extra_cmake_defines = ""
     if FLAGS.enable_rocm and FLAGS.ort_migraphx:
-        extra_cmake_defines = " CMAKE_CXX_FLAGS='-I/opt/rocm/include'"
+        extra_cmake_defines = " CMAKE_CXX_FLAGS='-I/opt/rocm/lib/migraphx/include -I/opt/rocm/include'"
     
     df += """
     WORKDIR /workspace/onnxruntime
