@@ -398,7 +398,7 @@ ENV PYTHONPATH $INTEL_OPENVINO_DIR/python/python3.10:$INTEL_OPENVINO_DIR/python/
     # MIGraphX installs headers to /opt/rocm/lib/migraphx/include/
     extra_cmake_defines = ""
     if FLAGS.enable_rocm and FLAGS.ort_migraphx:
-        extra_cmake_defines = " CMAKE_CXX_FLAGS='-I/opt/rocm/lib/migraphx/include -I/opt/rocm/include'"
+        extra_cmake_defines = ' CMAKE_CXX_FLAGS=-I/opt/rocm/lib/migraphx/include\\ -I/opt/rocm/include'
     
     df += """
     WORKDIR /workspace/onnxruntime
