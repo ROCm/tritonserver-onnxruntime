@@ -314,8 +314,9 @@ ENV PYTHONPATH $INTEL_OPENVINO_DIR/python/python3.10:$INTEL_OPENVINO_DIR/python/
     # It's not needed for building the ONNX Runtime library or Triton backend
     RUN sed -i '/from \.pytorch_export_helpers import infer_input_info/c\    pass  # PyTorch helpers disabled - not needed for ROCm/MIGraphX EP build' /workspace/onnxruntime/tools/python/util/__init__.py
 
-    # Fix: Add missing migraphx/quantization.hpp include for quantize_bf16 function
-    RUN sed -i '/#include "core\/providers\/migraphx\/migraphx_stream_handle.h"/a #include <migraphx/quantization.hpp>' /workspace/onnxruntime/onnxruntime/core/providers/migraphx/migraphx_execution_provider.cc
+    # Remove quantize_bf16 code block since it requires C++ internal API not exposed in C API
+    # This removes the entire #if block for bf16 quantization
+    RUN sed -i '/#if HIP_VERSION_MAJOR > 6 || (HIP_VERSION_MAJOR == 6 && HIP_VERSION_MINOR >= 4 && HIP_VERSION_PATCH >= 2)/,/#endif/{ /#if HIP_VERSION_MAJOR > 6 || (HIP_VERSION_MAJOR == 6 && HIP_VERSION_MINOR >= 4 && HIP_VERSION_PATCH >= 2)/d; /if (bf16_enable)/,/}/d; /#endif/d; }' /workspace/onnxruntime/onnxruntime/core/providers/migraphx/migraphx_execution_provider.cc
 
         """
 
@@ -375,8 +376,8 @@ ENV PYTHONPATH $INTEL_OPENVINO_DIR/python/python3.10:$INTEL_OPENVINO_DIR/python/
             if FLAGS.migraphx_home is not None:
                 ep_flags += ' --migraphx_home "{}"'.format(FLAGS.migraphx_home)
             else:
-                # Default to /opt/rocm/lib/migraphx where MIGraphX is installed
-                ep_flags += ' --migraphx_home "/opt/rocm/lib/migraphx"'
+                # Default to /opt/rocm where MIGraphX API is installed
+                ep_flags += ' --migraphx_home "/opt/rocm"'
         cmake_defs = "CMAKE_HIP_COMPILER"
         cuda_archs = "/opt/rocm/llvm/bin/clang++"
         
@@ -394,20 +395,13 @@ ENV PYTHONPATH $INTEL_OPENVINO_DIR/python/python3.10:$INTEL_OPENVINO_DIR/python/
     elif not FLAGS.enable_rocm:
         cuda_archs = "60;61;70;75;80;86;90"
 
-    # Add MIGraphX include path for ROCm builds
-    # MIGraphX installs headers to /opt/rocm/lib/migraphx/include/
-    extra_cmake_defines = ""
-    if FLAGS.enable_rocm and FLAGS.ort_migraphx:
-        extra_cmake_defines = """ CMAKE_CXX_FLAGS=-I/opt/rocm/lib/migraphx/include"""
-    
     df += """
     WORKDIR /workspace/onnxruntime
     ARG COMMON_BUILD_ARGS="--config ${{ONNXRUNTIME_BUILD_CONFIG}} --skip_submodule_sync --parallel --build_shared_lib \
-    --build_dir /workspace/build --cmake_extra_defines {}={}{} "
+    --build_dir /workspace/build --cmake_extra_defines {}={} "
     """.format(
             cmake_defs,
-            cuda_archs,
-            extra_cmake_defines
+            cuda_archs
         )
 
     df += """
