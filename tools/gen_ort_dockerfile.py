@@ -268,9 +268,20 @@ ENV PYTHONPATH $INTEL_OPENVINO_DIR/python/python3.10:$INTEL_OPENVINO_DIR/python/
         """
     elif FLAGS.enable_rocm:
             df += """
-        # Install onnxruntime using prebuilt wheel
-        RUN wget https://repo.radeon.com/rocm/manylinux/rocm-rel-7.0/onnxruntime_rocm-1.22.1-cp310-cp310-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
-        RUN pip install onnxruntime_rocm-1.22.1-cp310-cp310-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
+    #
+    # ONNX Runtime for ROCm - use prebuilt wheel + clone source for headers
+    #
+    ARG ONNXRUNTIME_VERSION
+    ARG ONNXRUNTIME_REPO
+    ARG ONNXRUNTIME_BUILD_CONFIG
+
+    # Install onnxruntime from prebuilt wheel
+    RUN wget https://repo.radeon.com/rocm/manylinux/rocm-rel-7.0/onnxruntime_rocm-1.22.1-cp310-cp310-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl && \
+        pip3 install onnxruntime_rocm-1.22.1-cp310-cp310-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl && \
+        rm onnxruntime_rocm-1.22.1-cp310-cp310-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
+
+    # Clone ONNX Runtime source to get header files (not building from source)
+    RUN git clone -b ${ONNXRUNTIME_VERSION} --depth=1 ${ONNXRUNTIME_REPO} onnxruntime
         """
 
     else:
@@ -357,39 +368,79 @@ ENV PYTHONPATH $INTEL_OPENVINO_DIR/python/python3.10:$INTEL_OPENVINO_DIR/python/
             cuda_archs
         )
 
-    df += """
-    RUN ./build.sh ${{COMMON_BUILD_ARGS}} --update --build {}
-    """.format(
-            ep_flags
-        )
-
-    df += """
+    if FLAGS.enable_rocm:
+        # For ROCm, skip build - use prebuilt wheel libraries instead
+        df += """
     #
-    # Copy all artifacts needed by the backend to /opt/onnxruntime
+    # Extract and copy ONNX Runtime artifacts from wheel to /opt/onnxruntime
     #
-    WORKDIR /opt/onnxruntime
+    WORKDIR /workspace
 
-    RUN mkdir -p /opt/onnxruntime && \
-        cp /workspace/onnxruntime/LICENSE /opt/onnxruntime && \
-        cat /workspace/onnxruntime/cmake/external/onnx/VERSION_NUMBER > /opt/onnxruntime/ort_onnx_version.txt
-
-    # ONNX Runtime headers, libraries and binaries
-    RUN mkdir -p /opt/onnxruntime/include && \
-        cp /workspace/onnxruntime/include/onnxruntime/core/session/onnxruntime_c_api.h \
-        /opt/onnxruntime/include && \
-        cp /workspace/onnxruntime/include/onnxruntime/core/session/onnxruntime_session_options_config_keys.h \
-        /opt/onnxruntime/include && \
-        cp /workspace/onnxruntime/include/onnxruntime/core/providers/cpu/cpu_provider_factory.h \
-        /opt/onnxruntime/include
-
-
-
+    # Create /opt/onnxruntime directory structure
     RUN mkdir -p /opt/onnxruntime/lib && \
-        cp /workspace/build/${ONNXRUNTIME_BUILD_CONFIG}/libonnxruntime_providers_shared.so \
-        /opt/onnxruntime/lib && \
-        cp /workspace/build/${ONNXRUNTIME_BUILD_CONFIG}/libonnxruntime.so* \
-        /opt/onnxruntime/lib
-"""
+        mkdir -p /opt/onnxruntime/include && \
+        mkdir -p /opt/onnxruntime/bin
+
+    # Copy libraries from the installed wheel to /opt/onnxruntime/lib/
+    RUN cp /opt/venv/lib/python3.10/site-packages/onnxruntime/capi/libonnxruntime.so.* /opt/onnxruntime/lib/ && \
+        cp /opt/venv/lib/python3.10/site-packages/onnxruntime/capi/libonnxruntime_providers_shared.so /opt/onnxruntime/lib/ && \
+        cp /opt/venv/lib/python3.10/site-packages/onnxruntime/capi/libonnxruntime_providers_rocm.so /opt/onnxruntime/lib/ && \
+        cp /opt/venv/lib/python3.10/site-packages/onnxruntime/capi/libonnxruntime_providers_migraphx.so /opt/onnxruntime/lib/ && \
+        cd /opt/onnxruntime/lib && \
+        ln -s libonnxruntime.so.1.22.1 libonnxruntime.so
+
+    # Copy header files from cloned source
+    RUN cp /workspace/onnxruntime/include/onnxruntime/core/session/onnxruntime_c_api.h /opt/onnxruntime/include/ && \
+        cp /workspace/onnxruntime/include/onnxruntime/core/session/onnxruntime_session_options_config_keys.h /opt/onnxruntime/include/ && \
+        cp /workspace/onnxruntime/include/onnxruntime/core/providers/cpu/cpu_provider_factory.h /opt/onnxruntime/include/ && \
+        cp /workspace/onnxruntime/LICENSE /opt/onnxruntime/ && \
+        cat /workspace/onnxruntime/cmake/external/onnx/VERSION_NUMBER > /opt/onnxruntime/ort_onnx_version.txt || echo "1.22.1" > /opt/onnxruntime/ort_onnx_version.txt
+
+    # Copy MIGraphX provider header if available
+    RUN if [ -f /workspace/onnxruntime/onnxruntime/core/providers/migraphx/migraphx_provider_factory.h ]; then \
+            cp /workspace/onnxruntime/onnxruntime/core/providers/migraphx/migraphx_provider_factory.h /opt/onnxruntime/include/; \
+        fi
+
+    # Set RPATH for all .so files
+    RUN cd /opt/onnxruntime/lib && \
+        for i in $(find . -mindepth 1 -maxdepth 1 -type f -name '*.so*'); do \
+            patchelf --set-rpath '$ORIGIN' $i 2>/dev/null || true; \
+        done
+        """
+    else:
+        df += """
+        RUN ./build.sh ${{COMMON_BUILD_ARGS}} --update --build {}
+        """.format(
+                ep_flags
+            )
+
+        df += """
+        #
+        # Copy all artifacts needed by the backend to /opt/onnxruntime
+        #
+        WORKDIR /opt/onnxruntime
+
+        RUN mkdir -p /opt/onnxruntime && \
+            cp /workspace/onnxruntime/LICENSE /opt/onnxruntime && \
+            cat /workspace/onnxruntime/cmake/external/onnx/VERSION_NUMBER > /opt/onnxruntime/ort_onnx_version.txt
+
+        # ONNX Runtime headers, libraries and binaries
+        RUN mkdir -p /opt/onnxruntime/include && \
+            cp /workspace/onnxruntime/include/onnxruntime/core/session/onnxruntime_c_api.h \
+            /opt/onnxruntime/include && \
+            cp /workspace/onnxruntime/include/onnxruntime/core/session/onnxruntime_session_options_config_keys.h \
+            /opt/onnxruntime/include && \
+            cp /workspace/onnxruntime/include/onnxruntime/core/providers/cpu/cpu_provider_factory.h \
+            /opt/onnxruntime/include
+
+
+
+        RUN mkdir -p /opt/onnxruntime/lib && \
+            cp /workspace/build/${ONNXRUNTIME_BUILD_CONFIG}/libonnxruntime_providers_shared.so \
+            /opt/onnxruntime/lib && \
+            cp /workspace/build/${ONNXRUNTIME_BUILD_CONFIG}/libonnxruntime.so* \
+            /opt/onnxruntime/lib
+    """
     if target_platform() == "igpu":
         df += """
 RUN mkdir -p /opt/onnxruntime/bin
@@ -410,13 +461,14 @@ RUN mkdir -p /opt/onnxruntime/bin
     """
 
         if FLAGS.enable_rocm:
-            df += """
-    RUN if [ -f /workspace/build/${ONNXRUNTIME_BUILD_CONFIG}/libonnxruntime_providers_rocm.so ]; then \
-            cp /workspace/build/${ONNXRUNTIME_BUILD_CONFIG}/libonnxruntime_providers_rocm.so /opt/onnxruntime/lib; \
-        else \
-            echo "Warning: libonnxruntime_providers_rocm.so not found, skipping"; \
-        fi
-    """
+    #         df += """
+    # RUN if [ -f /workspace/build/${ONNXRUNTIME_BUILD_CONFIG}/libonnxruntime_providers_rocm.so ]; then \
+    #         cp /workspace/build/${ONNXRUNTIME_BUILD_CONFIG}/libonnxruntime_providers_rocm.so /opt/onnxruntime/lib; \
+    #     else \
+    #         echo "Warning: libonnxruntime_providers_rocm.so not found, skipping"; \
+    #     fi
+    # """
+            pass
 
         if FLAGS.ort_tensorrt:
             df += """
