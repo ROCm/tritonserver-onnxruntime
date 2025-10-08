@@ -427,7 +427,11 @@ ENV PYTHONPATH $INTEL_OPENVINO_DIR/python/python3.10:$INTEL_OPENVINO_DIR/python/
         cp /workspace/onnxruntime/include/onnxruntime/core/session/onnxruntime_session_options_config_keys.h \
         /opt/onnxruntime/include && \
         cp /workspace/onnxruntime/include/onnxruntime/core/providers/cpu/cpu_provider_factory.h \
-        /opt/onnxruntime/include
+        /opt/onnxruntime/include && \
+        cp /workspace/onnxruntime/include/onnxruntime/core/framework/provider_options.h \
+        /opt/onnxruntime/include 2>/dev/null || true && \
+        cp /workspace/onnxruntime/include/onnxruntime/core/session/onnxruntime_ep_c_api.h \
+        /opt/onnxruntime/include 2>/dev/null || true
 
 
 
