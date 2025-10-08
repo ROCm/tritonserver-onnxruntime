@@ -315,8 +315,8 @@ ENV PYTHONPATH $INTEL_OPENVINO_DIR/python/python3.10:$INTEL_OPENVINO_DIR/python/
     RUN sed -i '/from \.pytorch_export_helpers import infer_input_info/c\    pass  # PyTorch helpers disabled - not needed for ROCm/MIGraphX EP build' /workspace/onnxruntime/tools/python/util/__init__.py
 
     # Remove quantize_bf16 code block since it requires C++ internal API not exposed in C API
-    # This removes the entire #if block for bf16 quantization
-    RUN sed -i '/#if HIP_VERSION_MAJOR > 6 || (HIP_VERSION_MAJOR == 6 && HIP_VERSION_MINOR >= 4 && HIP_VERSION_PATCH >= 2)/,/#endif/{ /#if HIP_VERSION_MAJOR > 6 || (HIP_VERSION_MAJOR == 6 && HIP_VERSION_MINOR >= 4 && HIP_VERSION_PATCH >= 2)/d; /if (bf16_enable)/,/}/d; /#endif/d; }' /workspace/onnxruntime/onnxruntime/core/providers/migraphx/migraphx_execution_provider.cc
+    # This removes lines 1243-1249 (the bf16 quantization block)
+    RUN sed -i '/^#if HIP_VERSION_MAJOR > 6 || (HIP_VERSION_MAJOR == 6 && HIP_VERSION_MINOR >= 4 && HIP_VERSION_PATCH >= 2)$/,/^#endif$/ { /if (bf16_enable)/,/^  }$/d; /^#if HIP_VERSION_MAJOR > 6 || (HIP_VERSION_MAJOR == 6 && HIP_VERSION_MINOR >= 4 && HIP_VERSION_PATCH >= 2)$/d; /^#endif$/d; }' /workspace/onnxruntime/onnxruntime/core/providers/migraphx/migraphx_execution_provider.cc
 
         """
 
@@ -437,10 +437,9 @@ ENV PYTHONPATH $INTEL_OPENVINO_DIR/python/python3.10:$INTEL_OPENVINO_DIR/python/
         cp /workspace/build/${ONNXRUNTIME_BUILD_CONFIG}/libonnxruntime.so \
         /opt/onnxruntime/lib
 
-    # workaround: version 18 is demanded even when it isn't there
-    RUN cd /opt/onnxruntime/lib
-    # RUN ln -s libonnxruntime.so libonnxruntime.so.1.18.0
-    RUN ln -s libonnxruntime.so.rel-1.17.2 libonnxruntime.so.1.17.2
+    # Create version-specific symlink for libonnxruntime.so
+    RUN cd /opt/onnxruntime/lib && \
+        ln -sf libonnxruntime.so libonnxruntime.so.${ONNXRUNTIME_VERSION}
 """
     if target_platform() == "igpu":
         df += """
@@ -463,8 +462,11 @@ RUN mkdir -p /opt/onnxruntime/bin
 
         if FLAGS.enable_rocm:
             df += """
-    RUN cp /workspace/build/${ONNXRUNTIME_BUILD_CONFIG}/libonnxruntime_providers_rocm.so \
-        /opt/onnxruntime/lib
+    RUN if [ -f /workspace/build/${ONNXRUNTIME_BUILD_CONFIG}/libonnxruntime_providers_rocm.so ]; then \
+            cp /workspace/build/${ONNXRUNTIME_BUILD_CONFIG}/libonnxruntime_providers_rocm.so /opt/onnxruntime/lib; \
+        else \
+            echo "Warning: libonnxruntime_providers_rocm.so not found, skipping"; \
+        fi
     """
 
         if FLAGS.ort_tensorrt:
