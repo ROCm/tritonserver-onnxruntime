@@ -434,12 +434,8 @@ ENV PYTHONPATH $INTEL_OPENVINO_DIR/python/python3.10:$INTEL_OPENVINO_DIR/python/
     RUN mkdir -p /opt/onnxruntime/lib && \
         cp /workspace/build/${ONNXRUNTIME_BUILD_CONFIG}/libonnxruntime_providers_shared.so \
         /opt/onnxruntime/lib && \
-        cp /workspace/build/${ONNXRUNTIME_BUILD_CONFIG}/libonnxruntime.so \
+        cp /workspace/build/${ONNXRUNTIME_BUILD_CONFIG}/libonnxruntime.so* \
         /opt/onnxruntime/lib
-
-    # Create version-specific symlink for libonnxruntime.so
-    RUN cd /opt/onnxruntime/lib && \
-        ln -sf libonnxruntime.so libonnxruntime.so.${ONNXRUNTIME_VERSION}
 """
     if target_platform() == "igpu":
         df += """
