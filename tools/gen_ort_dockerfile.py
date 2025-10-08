@@ -202,40 +202,9 @@ RUN apt-get install -y hipmagma || \
             df+= """ARG MIGRAPHX_VERSION=develop"""
 
         df += """
-# Install MIGraphX from source
-ARG GPU_TARGETS='gfx908;gfx90a;gfx1030;gfx1100;gfx1101;gfx1102;gfx940;gfx941;gfx942'
-
-# Workaround broken rocm packages
-RUN ln -s /opt/rocm-* /opt/rocm
-RUN echo "/opt/rocm/lib" > /etc/ld.so.conf.d/rocm.conf
-RUN echo "/opt/rocm/llvm/lib" > /etc/ld.so.conf.d/rocm-llvm.conf
-RUN ldconfig
-
-# Remove old MIGraphX packages from base image to avoid conflicts
-RUN apt-get remove -y migraphx migraphx-dev libmigraphx-dev || true
-RUN apt-get autoremove -y || true
-
-RUN mkdir /migraphx
-RUN cd /migraphx && git clone --depth=1 --branch ${MIGRAPHX_VERSION} https://github.com/ROCm/AMDMIGraphX src && cd src && rbuild package --cxx /opt/rocm/llvm/bin/clang++ -d /migraphx/deps -B /migraphx/build -DPYTHON_EXECUTABLE=/usr/bin/python3 -DBUILD_DEV=On -DGPU_TARGETS=${GPU_TARGETS} && dpkg -i /migraphx/build/*.deb
-
-# Verify MIGraphX installation
-RUN ls -la /opt/rocm/lib/ | grep -i migraphx || echo "MIGraphX not found in /opt/rocm/lib/"
-RUN find /usr -name "*migraphx*" -type f 2>/dev/null | head -10 || echo "MIGraphX libraries not found in /usr"
-RUN ldconfig && ldconfig -p | grep migraphx || echo "MIGraphX not in library cache"
-
-# Verify quantize_bf16 is available in the installed MIGraphX headers
-RUN echo "Checking for quantize_bf16 in MIGraphX headers:" && \
-    find /opt/rocm/include -name "*.hpp" -o -name "*.h" | xargs grep -l "quantize_bf16" || \
-    find /usr/include -name "*.hpp" -o -name "*.h" | xargs grep -l "quantize_bf16" || \
-    echo "WARNING: quantize_bf16 not found in MIGraphX headers!"
-
-# Set environment variable for MIGraphX include path
-# MIGraphX installs headers to /opt/rocm/lib/migraphx/include/ (non-standard location)
-ENV CPATH="/opt/rocm/lib/migraphx/include:/opt/rocm/include:${CPATH}"
-ENV C_INCLUDE_PATH="/opt/rocm/lib/migraphx/include:/opt/rocm/include:${C_INCLUDE_PATH}"
-ENV CPLUS_INCLUDE_PATH="/opt/rocm/lib/migraphx/include:/opt/rocm/include:${CPLUS_INCLUDE_PATH}"
-
-# RUN cd / && rm -rf /migraphx
+    # Install MIGraphX from package manager
+    # Header files and libraries are installed under /opt/rocm-<version>, where <version> is the ROCm version.
+    sudo apt update && sudo apt install -y migraphx
     """
 
 
@@ -299,25 +268,9 @@ ENV PYTHONPATH $INTEL_OPENVINO_DIR/python/python3.10:$INTEL_OPENVINO_DIR/python/
         """
     elif FLAGS.enable_rocm:
             df += """
-    #
-    # ONNX Runtime build
-    #
-    ARG ONNXRUNTIME_VERSION
-    ARG ONNXRUNTIME_REPO
-    ARG ONNXRUNTIME_BUILD_CONFIG
-
-    RUN git clone -b ${ONNXRUNTIME_VERSION} --recursive ${ONNXRUNTIME_REPO} onnxruntime && \
-        (cd onnxruntime && git submodule update --init --recursive)
-
-    # Fix: Remove PyTorch import from build script (not needed for building ONNX Runtime)
-    # The pytorch_export_helpers is only for users converting PyTorch models to ONNX
-    # It's not needed for building the ONNX Runtime library or Triton backend
-    RUN sed -i '/from \.pytorch_export_helpers import infer_input_info/c\    pass  # PyTorch helpers disabled - not needed for ROCm/MIGraphX EP build' /workspace/onnxruntime/tools/python/util/__init__.py
-
-    # Remove quantize_bf16 code block since it requires C++ internal API not exposed in C API
-    # This removes lines 1243-1249 (the bf16 quantization block)
-    RUN sed -i '/^#if HIP_VERSION_MAJOR > 6 || (HIP_VERSION_MAJOR == 6 && HIP_VERSION_MINOR >= 4 && HIP_VERSION_PATCH >= 2)$/,/^#endif$/ { /if (bf16_enable)/,/^  }$/d; /^#if HIP_VERSION_MAJOR > 6 || (HIP_VERSION_MAJOR == 6 && HIP_VERSION_MINOR >= 4 && HIP_VERSION_PATCH >= 2)$/d; /^#endif$/d; }' /workspace/onnxruntime/onnxruntime/core/providers/migraphx/migraphx_execution_provider.cc
-
+        # Install onnxruntime using prebuilt wheel
+        wget https://repo.radeon.com/rocm/manylinux/rocm-rel-7.0/onnxruntime_rocm-1.22.1-cp310-cp310-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
+        pip install onnxruntime_rocm-1.22.1-cp310-cp310-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
         """
 
     else:
