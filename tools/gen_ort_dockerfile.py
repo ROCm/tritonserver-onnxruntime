@@ -204,7 +204,7 @@ RUN apt-get install -y hipmagma || \
         df += """
     # Install MIGraphX from package manager
     # Header files and libraries are installed under /opt/rocm-<version>, where <version> is the ROCm version.
-    sudo apt update && sudo apt install -y migraphx
+    RUN apt update && apt install -y migraphx
     """
 
 
@@ -269,8 +269,8 @@ ENV PYTHONPATH $INTEL_OPENVINO_DIR/python/python3.10:$INTEL_OPENVINO_DIR/python/
     elif FLAGS.enable_rocm:
             df += """
         # Install onnxruntime using prebuilt wheel
-        wget https://repo.radeon.com/rocm/manylinux/rocm-rel-7.0/onnxruntime_rocm-1.22.1-cp310-cp310-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
-        pip install onnxruntime_rocm-1.22.1-cp310-cp310-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
+        RUN wget https://repo.radeon.com/rocm/manylinux/rocm-rel-7.0/onnxruntime_rocm-1.22.1-cp310-cp310-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
+        RUN pip install onnxruntime_rocm-1.22.1-cp310-cp310-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
         """
 
     else:
