@@ -73,8 +73,8 @@ def dockerfile_common():
     df = """
 ARG BASE_IMAGE={}
 ARG ONNXRUNTIME_VERSION={}
-# ARG ONNXRUNTIME_REPO=https://github.com/microsoft/onnxruntime
-ARG ONNXRUNTIME_REPO=https://github.com/ROCm/onnxruntime.git
+ARG ONNXRUNTIME_REPO=https://github.com/microsoft/onnxruntime
+# ARG ONNXRUNTIME_REPO=https://github.com/ROCm/onnxruntime.git
 ARG ONNXRUNTIME_BUILD_CONFIG={}
 """.format(
         FLAGS.triton_container, FLAGS.ort_version, FLAGS.ort_build_config
@@ -427,11 +427,7 @@ ENV PYTHONPATH $INTEL_OPENVINO_DIR/python/python3.10:$INTEL_OPENVINO_DIR/python/
         cp /workspace/onnxruntime/include/onnxruntime/core/session/onnxruntime_session_options_config_keys.h \
         /opt/onnxruntime/include && \
         cp /workspace/onnxruntime/include/onnxruntime/core/providers/cpu/cpu_provider_factory.h \
-        /opt/onnxruntime/include && \
-        cp /workspace/onnxruntime/include/onnxruntime/core/framework/provider_options.h \
-        /opt/onnxruntime/include 2>/dev/null || true && \
-        cp /workspace/onnxruntime/include/onnxruntime/core/session/onnxruntime_ep_c_api.h \
-        /opt/onnxruntime/include 2>/dev/null || true
+        /opt/onnxruntime/include
 
 
 
