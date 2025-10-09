@@ -550,12 +550,15 @@ if(TRITON_ONNXRUNTIME_DOCKER_BUILD)
       DESTINATION ${CMAKE_INSTALL_PREFIX}/backends/onnxruntime
     )
 
-    install(
-      DIRECTORY
-        ${CMAKE_CURRENT_BINARY_DIR}/onnxruntime/test
-      USE_SOURCE_PERMISSIONS
-      DESTINATION ${CMAKE_INSTALL_PREFIX}
-    )
+    # Only install test directory if it exists (not present when using prebuilt wheel for ROCm)
+    if(EXISTS ${CMAKE_CURRENT_BINARY_DIR}/onnxruntime/test)
+      install(
+        DIRECTORY
+          ${CMAKE_CURRENT_BINARY_DIR}/onnxruntime/test
+        USE_SOURCE_PERMISSIONS
+        DESTINATION ${CMAKE_INSTALL_PREFIX}
+      )
+    endif()
   endif() # NOT WIN32
 endif() # TRITON_ONNXRUNTIME_DOCKER_BUILD
 
