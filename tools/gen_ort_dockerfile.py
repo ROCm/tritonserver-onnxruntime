@@ -387,6 +387,7 @@ ENV PYTHONPATH $INTEL_OPENVINO_DIR/python/python3.10:$INTEL_OPENVINO_DIR/python/
         cp /opt/venv/lib/python3.10/site-packages/onnxruntime/capi/libonnxruntime_providers_rocm.so /opt/onnxruntime/lib/ && \
         cp /opt/venv/lib/python3.10/site-packages/onnxruntime/capi/libonnxruntime_providers_migraphx.so /opt/onnxruntime/lib/ && \
         cd /opt/onnxruntime/lib && \
+        ln -s libonnxruntime.so.1.22.1 libonnxruntime.so.1 && \
         ln -s libonnxruntime.so.1.22.1 libonnxruntime.so
 
     # Copy header files from cloned source
