@@ -544,8 +544,8 @@ RUN mkdir -p /opt/onnxruntime/test
         /opt/onnxruntime/test
     """
 
-        with open(output_file, "w") as dfile:
-            dfile.write(df)
+    with open(output_file, "w") as dfile:
+        dfile.write(df)
 
 
     def dockerfile_for_windows(output_file):
