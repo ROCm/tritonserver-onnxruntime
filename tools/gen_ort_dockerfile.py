@@ -529,12 +529,14 @@ RUN mkdir -p /opt/onnxruntime/bin
 
     # For testing copy ONNX custom op library and model
 """
-    if target_platform() == "igpu":
-        df += """
+    # Skip copying test files for ROCm (using prebuilt wheel)
+    if not FLAGS.enable_rocm:
+        if target_platform() == "igpu":
+            df += """
 RUN mkdir -p /opt/onnxruntime/test
 """
-    else:
-        df += """
+        else:
+            df += """
     RUN mkdir -p /opt/onnxruntime/test && \
         cp /workspace/build/${ONNXRUNTIME_BUILD_CONFIG}/libcustom_op_library.so \
         /opt/onnxruntime/test && \
