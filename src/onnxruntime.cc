@@ -566,6 +566,11 @@ ModelState::LoadModel(
                   0,        // migraphx_int8_enable
                   0,        // migraphx_use_native_calibration_table
                   nullptr,  // migraphx_int8_calibration_table_name
+                  0,        // migraphx_save_compiled_model
+                  nullptr,  // migraphx_save_model_path
+                  0,        // migraphx_load_compiled_model
+                  nullptr,  // migraphx_load_model_path
+                  0,        // migraphx_exhaustive_tune
               };
               // Validate and set parameters
               triton::common::TritonJson::Value params;
