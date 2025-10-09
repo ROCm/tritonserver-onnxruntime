@@ -441,34 +441,26 @@ ENV PYTHONPATH $INTEL_OPENVINO_DIR/python/python3.10:$INTEL_OPENVINO_DIR/python/
             cp /workspace/build/${ONNXRUNTIME_BUILD_CONFIG}/libonnxruntime.so* \
             /opt/onnxruntime/lib
     """
+
     if target_platform() == "igpu":
         df += """
 RUN mkdir -p /opt/onnxruntime/bin
 """
     else:
-        df += """
-    RUN mkdir -p /opt/onnxruntime/bin && \
-        cp /workspace/build/${ONNXRUNTIME_BUILD_CONFIG}/onnxruntime_perf_test \
-        /opt/onnxruntime/bin && \
-        cp /workspace/build/${ONNXRUNTIME_BUILD_CONFIG}/onnx_test_runner \
-        /opt/onnxruntime/bin && \
-        (cd /opt/onnxruntime/bin && chmod a+x *)
-    """
+        if not FLAGS.enable_rocm:
+            df += """
+        RUN mkdir -p /opt/onnxruntime/bin && \
+            cp /workspace/build/${ONNXRUNTIME_BUILD_CONFIG}/onnxruntime_perf_test \
+            /opt/onnxruntime/bin && \
+            cp /workspace/build/${ONNXRUNTIME_BUILD_CONFIG}/onnx_test_runner \
+            /opt/onnxruntime/bin && \
+            (cd /opt/onnxruntime/bin && chmod a+x *)
+        """
         if FLAGS.enable_gpu:
             df += """
     RUN cp /workspace/build/${ONNXRUNTIME_BUILD_CONFIG}/libonnxruntime_providers_cuda.so \
         /opt/onnxruntime/lib
     """
-
-        if FLAGS.enable_rocm:
-    #         df += """
-    # RUN if [ -f /workspace/build/${ONNXRUNTIME_BUILD_CONFIG}/libonnxruntime_providers_rocm.so ]; then \
-    #         cp /workspace/build/${ONNXRUNTIME_BUILD_CONFIG}/libonnxruntime_providers_rocm.so /opt/onnxruntime/lib; \
-    #     else \
-    #         echo "Warning: libonnxruntime_providers_rocm.so not found, skipping"; \
-    #     fi
-    # """
-            pass
 
         if FLAGS.ort_tensorrt:
             df += """
@@ -479,15 +471,15 @@ RUN mkdir -p /opt/onnxruntime/bin
         /opt/onnxruntime/lib
     """
 
-        if FLAGS.ort_migraphx:
-            df += """
-    # MIGraphX specific headers and libraries
-    RUN cp /workspace/onnxruntime/onnxruntime/core/providers/migraphx/migraphx_provider_factory.h \
-        /opt/onnxruntime/include && \
-        cp /workspace/build/${ONNXRUNTIME_BUILD_CONFIG}/libonnxruntime_providers_migraphx.so \
-        /opt/onnxruntime/lib && \
-        cp /migraphx/build/lib/*.so* /opt/onnxruntime/lib
-    """
+    #     if FLAGS.ort_migraphx:
+    #         df += """
+    # # MIGraphX specific headers and libraries
+    # RUN cp /workspace/onnxruntime/onnxruntime/core/providers/migraphx/migraphx_provider_factory.h \
+    #     /opt/onnxruntime/include && \
+    #     cp /workspace/build/${ONNXRUNTIME_BUILD_CONFIG}/libonnxruntime_providers_migraphx.so \
+    #     /opt/onnxruntime/lib && \
+    #     cp /migraphx/build/lib/*.so* /opt/onnxruntime/lib
+    # """
 
         if FLAGS.ort_openvino is not None:
             df += """
