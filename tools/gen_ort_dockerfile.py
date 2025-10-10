@@ -125,7 +125,9 @@ RUN apt update -q=2 \\
     && apt install -y gpg wget \\
     && wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | gpg --dearmor - |  tee /usr/share/keyrings/kitware-archive-keyring.gpg >/dev/null \\
     && . /etc/os-release \\
-    && echo "deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] https://apt.kitware.com/ubuntu/ $UBUNTU_CODENAME main" | tee /etc/apt/sources.list.d/kitware.list >/dev/null \\
+    && KITWARE_DISTRO=$(if [ "$ID" = "debian" ]; then echo "debian"; else echo "ubuntu"; fi) \\
+    && KITWARE_CODENAME=$(if [ "$ID" = "debian" ]; then echo "$VERSION_CODENAME"; else echo "$UBUNTU_CODENAME"; fi) \\
+    && echo "deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] https://apt.kitware.com/$KITWARE_DISTRO/ $KITWARE_CODENAME main" | tee /etc/apt/sources.list.d/kitware.list >/dev/null \\
     && apt-get update -q=2 \\
     && apt-get install -y --no-install-recommends cmake=3.28* cmake-data=3.28* \\
     && cmake --version
