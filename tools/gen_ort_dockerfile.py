@@ -395,10 +395,13 @@ ENV PYTHONPATH $INTEL_OPENVINO_DIR/python/python3.10:$INTEL_OPENVINO_DIR/python/
         mkdir -p /opt/onnxruntime/bin
 
     # Copy libraries from the installed wheel to /opt/onnxruntime/lib/
-    RUN cp /opt/venv/lib/python3.10/site-packages/onnxruntime/capi/libonnxruntime.so.* /opt/onnxruntime/lib/ && \
-        cp /opt/venv/lib/python3.10/site-packages/onnxruntime/capi/libonnxruntime_providers_shared.so /opt/onnxruntime/lib/ && \
-        cp /opt/venv/lib/python3.10/site-packages/onnxruntime/capi/libonnxruntime_providers_rocm.so /opt/onnxruntime/lib/ && \
-        cp /opt/venv/lib/python3.10/site-packages/onnxruntime/capi/libonnxruntime_providers_migraphx.so /opt/onnxruntime/lib/ && \
+    # Dynamically find the site-packages directory
+    RUN SITE_PACKAGES=$(python3 -c "import site; print(site.getsitepackages()[0])") && \
+        echo "Found site-packages at: $SITE_PACKAGES" && \
+        cp $SITE_PACKAGES/onnxruntime/capi/libonnxruntime.so.* /opt/onnxruntime/lib/ && \
+        cp $SITE_PACKAGES/onnxruntime/capi/libonnxruntime_providers_shared.so /opt/onnxruntime/lib/ && \
+        cp $SITE_PACKAGES/onnxruntime/capi/libonnxruntime_providers_rocm.so /opt/onnxruntime/lib/ && \
+        cp $SITE_PACKAGES/onnxruntime/capi/libonnxruntime_providers_migraphx.so /opt/onnxruntime/lib/ && \
         cd /opt/onnxruntime/lib && \
         ln -s libonnxruntime.so.1.22.1 libonnxruntime.so.1 && \
         ln -s libonnxruntime.so.1.22.1 libonnxruntime.so
