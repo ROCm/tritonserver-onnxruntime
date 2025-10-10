@@ -121,16 +121,27 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Install dependencies from
 # onnxruntime/dockerfiles/scripts/install_common_deps.sh.
-RUN apt update -q=2 \\
-    && apt install -y gpg wget \\
-    && wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | gpg --dearmor - |  tee /usr/share/keyrings/kitware-archive-keyring.gpg >/dev/null \\
-    && . /etc/os-release \\
-    && KITWARE_DISTRO=$(if [ "$ID" = "debian" ]; then echo "debian"; else echo "ubuntu"; fi) \\
-    && KITWARE_CODENAME=$(if [ "$ID" = "debian" ]; then echo "$VERSION_CODENAME"; else echo "$UBUNTU_CODENAME"; fi) \\
-    && echo "deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] https://apt.kitware.com/$KITWARE_DISTRO/ $KITWARE_CODENAME main" | tee /etc/apt/sources.list.d/kitware.list >/dev/null \\
-    && apt-get update -q=2 \\
-    && apt-get install -y --no-install-recommends cmake=3.28* cmake-data=3.28* \\
-    && cmake --version
+# For Debian: Download CMake directly since Kitware doesn't have repos for all Debian versions
+# For Ubuntu: Use Kitware APT repository
+RUN . /etc/os-release && \\
+    if [ "$ID" = "debian" ]; then \\
+        apt update -q=2 && apt install -y wget && \\
+        wget -q https://github.com/Kitware/CMake/releases/download/v3.28.3/cmake-3.28.3-linux-x86_64.tar.gz && \\
+        tar -zxf cmake-3.28.3-linux-x86_64.tar.gz -C /opt && \\
+        rm cmake-3.28.3-linux-x86_64.tar.gz && \\
+        ln -sf /opt/cmake-3.28.3-linux-x86_64/bin/cmake /usr/local/bin/cmake && \\
+        ln -sf /opt/cmake-3.28.3-linux-x86_64/bin/ctest /usr/local/bin/ctest && \\
+        ln -sf /opt/cmake-3.28.3-linux-x86_64/bin/cpack /usr/local/bin/cpack && \\
+        cmake --version; \\
+    else \\
+        apt update -q=2 && \\
+        apt install -y gpg wget && \\
+        wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | gpg --dearmor - | tee /usr/share/keyrings/kitware-archive-keyring.gpg >/dev/null && \\
+        echo "deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] https://apt.kitware.com/ubuntu/ $UBUNTU_CODENAME main" | tee /etc/apt/sources.list.d/kitware.list >/dev/null && \\
+        apt-get update -q=2 && \\
+        apt-get install -y --no-install-recommends cmake=3.28* cmake-data=3.28* && \\
+        cmake --version; \\
+    fi
 
 """
     if FLAGS.enable_gpu:
