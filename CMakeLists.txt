@@ -119,7 +119,7 @@ project(tritononnxruntimebackend LANGUAGES C CXX)
 
 option(TRITON_ENABLE_GPU "Enable GPU support in backend" ON)
 option(TRITON_ENABLE_ROCM "Enable AMD GPU support in backend" ON)
-option(TRITON_LINUX_DISTRO "Linux distro to use for build" STRING "ubuntu")
+set(TRITON_LINUX_DISTRO "ubuntu" CACHE STRING "Linux distro to use for build")
 option(TRITON_ENABLE_STATS "Include statistics collections in backend" ON)
 option(TRITON_ENABLE_ONNXRUNTIME_TENSORRT
   "Enable TensorRT execution provider for ONNXRuntime backend in server" OFF)
