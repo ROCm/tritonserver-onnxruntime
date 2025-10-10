@@ -162,11 +162,11 @@ RUN _CUDNN_VERSION=$(echo $CUDNN_VERSION | cut -d. -f1-2) && \
             df += """ARG ROCM_VERSION=5.7"""
 
         df += """
-RUN apt-get clean && apt-get update && apt-get install -y locales
-RUN locale-gen en_US.UTF-8
-RUN update-locale LANG=en_US.UTF-8
-ENV LC_ALL C.UTF-8
-ENV LANG C.UTF-8
+# Set up locale
+RUN apt-get clean && apt-get update && apt-get install -y locales && \
+    locale-gen en_US.UTF-8
+ENV LC_ALL=C.UTF-8
+ENV LANG=C.UTF-8
 
 # Support multiarch
 RUN dpkg --add-architecture i386
