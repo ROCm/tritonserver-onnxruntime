@@ -117,7 +117,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         python3-pip \
         git \
         gnupg \
-        gnupg1
+        gnupg1 && \
+    rm -rf /var/lib/apt/lists/*
 
 # Install dependencies from
 # onnxruntime/dockerfiles/scripts/install_common_deps.sh.
@@ -181,17 +182,20 @@ RUN sh -c \"echo 'Package: *\\nPin: release o=repo.radeon.com\\nPin-priority: 60
 
 RUN apt-get update &&\
     apt-get install -y sudo git apt-utils bash build-essential curl doxygen gdb rocm-dev python3-dev python3-pip miopen-hip \
-    rocblas half aria2 libnuma-dev pkg-config ccache software-properties-common wget libnuma-dev libssl-dev zlib1g-dev
+    rocblas half aria2 libnuma-dev pkg-config ccache software-properties-common wget libnuma-dev libssl-dev zlib1g-dev && \
+    rm -rf /var/lib/apt/lists/*
 
 RUN aria2c -q -d /tmp -o cmake-3.28.3-linux-x86_64.tar.gz \
 https://github.com/Kitware/CMake/releases/download/v3.28.3/cmake-3.28.3-linux-x86_64.tar.gz &&\
 tar -zxf /tmp/cmake-3.28.3-linux-x86_64.tar.gz -C /opt &&\
 ln -sf /opt/cmake-3.28.3-linux-x86_64/bin/cmake /usr/local/bin/cmake &&\
 ln -sf /opt/cmake-3.28.3-linux-x86_64/bin/ctest /usr/local/bin/ctest &&\
-ln -sf /opt/cmake-3.28.3-linux-x86_64/bin/cpack /usr/local/bin/cpack
+ln -sf /opt/cmake-3.28.3-linux-x86_64/bin/cpack /usr/local/bin/cpack && \
+rm -f /tmp/cmake-3.28.3-linux-x86_64.tar.gz
 
 # Install rbuild
-RUN pip3 install https://github.com/RadeonOpenCompute/rbuild/archive/master.tar.gz numpy yapf==0.28.0 asciidoc CppHeaderParser setuptools wheel
+RUN pip3 install https://github.com/RadeonOpenCompute/rbuild/archive/master.tar.gz numpy yapf==0.28.0 asciidoc CppHeaderParser setuptools wheel && \
+    pip3 cache purge
 
 ENV PATH /opt/cmake-3.28.3-linux-x86_64/bin:/opt/miniconda/bin:${PATH}
 # Remove conda cmake to avoid conflicts and verify our CMake version
@@ -201,11 +205,10 @@ RUN mv /opt/conda/envs/py_3.10/bin/cmake /opt/conda/envs/py_3.10/bin/cmake.old |
     echo "CMake path verification:" && ls -la /opt/cmake-3.28.3-linux-x86_64/bin/cmake
 # Install rocm ep dependencies
 RUN apt-get update &&\
-    apt-get install -y rocrand rccl rccl-dev hipsparse hipfft hipcub hipblas rocthrust hip-base rocm-device-libs hipify-clang miopen-hip-dev rocm-cmake
+    apt-get install -y rocrand rccl rccl-dev hipsparse hipfft hipcub hipblas rocthrust hip-base rocm-device-libs hipify-clang miopen-hip-dev rocm-cmake && \
+    rm -rf /var/lib/apt/lists/*
 
-# Install magma library required by PyTorch (fixes libmagma.so missing error)
-RUN apt-get install -y hipmagma || \
-    (pip3 install --no-cache-dir torch-magma || echo "Warning: Could not install magma, continuing anyway")
+# Note: hipmagma/torch-magma are PyTorch dependencies, not needed for ONNX Runtime backend
 """
 
     if FLAGS.ort_migraphx:
@@ -217,7 +220,7 @@ RUN apt-get install -y hipmagma || \
         df += """
     # Install MIGraphX from package manager
     # Header files and libraries are installed under /opt/rocm-<version>, where <version> is the ROCm version.
-    RUN apt update && apt install -y migraphx
+    RUN apt update && apt install -y migraphx && rm -rf /var/lib/apt/lists/*
     """
 
 
@@ -291,7 +294,8 @@ ENV PYTHONPATH $INTEL_OPENVINO_DIR/python/python3.10:$INTEL_OPENVINO_DIR/python/
     # Install onnxruntime from prebuilt wheel
     RUN wget https://repo.radeon.com/rocm/manylinux/rocm-rel-7.0/onnxruntime_rocm-1.22.1-cp310-cp310-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl && \
         pip3 install onnxruntime_rocm-1.22.1-cp310-cp310-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl && \
-        rm onnxruntime_rocm-1.22.1-cp310-cp310-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
+        rm onnxruntime_rocm-1.22.1-cp310-cp310-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl && \
+        pip3 cache purge
 
     # Clone ONNX Runtime source to get header files (not building from source)
     RUN git clone -b ${ONNXRUNTIME_VERSION} --depth=1 ${ONNXRUNTIME_REPO} onnxruntime
@@ -423,6 +427,9 @@ ENV PYTHONPATH $INTEL_OPENVINO_DIR/python/python3.10:$INTEL_OPENVINO_DIR/python/
         for i in $(find . -mindepth 1 -maxdepth 1 -type f -name '*.so*'); do \
             patchelf --set-rpath '$ORIGIN' $i 2>/dev/null || true; \
         done
+    
+    # Clean up: Remove the cloned source repository (only needed headers, already copied)
+    RUN rm -rf /workspace/onnxruntime
         """
     else:
         df += """
