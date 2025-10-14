@@ -100,6 +100,9 @@ def dockerfile_for_linux(output_file):
 # Ensure apt-get won't prompt for selecting options
 ENV DEBIAN_FRONTEND=noninteractive
 
+# Allow pip to install packages system-wide (needed for Debian 12+)
+ENV PIP_BREAK_SYSTEM_PACKAGES=1
+
 # The Onnx Runtime dockerfile is the collection of steps in
 # https://github.com/microsoft/onnxruntime/tree/master/dockerfiles
 
@@ -168,6 +171,9 @@ RUN apt-get clean && apt-get update && apt-get install -y locales && \
     locale-gen en_US.UTF-8
 ENV LC_ALL=C.UTF-8
 ENV LANG=C.UTF-8
+
+# Allow pip to install packages system-wide (needed for Debian 12+)
+ENV PIP_BREAK_SYSTEM_PACKAGES=1
 
 # Support multiarch
 RUN dpkg --add-architecture i386
