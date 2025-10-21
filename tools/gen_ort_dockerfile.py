@@ -186,6 +186,7 @@ RUN . /etc/os-release && \\
         apt-get update && \\
         apt-get install -y python3-setuptools python3-wheel && \\
         apt-get install -y rocm-dev rocm-libs miopen-hip rocblas hipblas rocrand rccl rccl-dev hipsparse hipfft hipcub rocthrust hip-base rocm-device-libs hipify-clang miopen-hip-dev rocm-cmake && \\
+        apt-get install -y sudo git apt-utils bash build-essential curl doxygen gdb python3-dev python3-pip aria2 libnuma-dev pkg-config ccache software-properties-common libssl-dev zlib1g-dev && \\
         rm -rf /var/lib/apt/lists/*; \\
     else \\
         echo "Ubuntu detected - using pre-installed ROCm 7.0 from base container"; \\
