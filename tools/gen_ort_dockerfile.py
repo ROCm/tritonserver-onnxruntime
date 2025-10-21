@@ -312,7 +312,7 @@ ENV PYTHONPATH $INTEL_OPENVINO_DIR/python/python3.10:$INTEL_OPENVINO_DIR/python/
         if [ "$ID" = "debian" ]; then \\
             echo "Debian detected - installing ONNX Runtime from prebuilt wheel"; \\
             wget https://repo.radeon.com/rocm/manylinux/rocm-rel-7.0/onnxruntime_rocm-1.22.1-cp310-cp310-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl && \\
-            pip3 install onnxruntime_rocm-1.22.1-cp310-cp310-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl && \\
+            pip3 install --timeout=300 --retries=5 onnxruntime_rocm-1.22.1-cp310-cp310-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl && \\
             rm onnxruntime_rocm-1.22.1-cp310-cp310-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl && \\
             pip3 cache purge && \\
             echo "Cloning ONNX Runtime source for header files"; \\
