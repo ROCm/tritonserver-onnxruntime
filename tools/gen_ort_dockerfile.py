@@ -207,7 +207,7 @@ ln -sf /opt/cmake-3.28.3-linux-x86_64/bin/cpack /usr/local/bin/cpack && \
 rm -f /tmp/cmake-3.28.3-linux-x86_64.tar.gz
 
 # Install rbuild
-RUN pip3 install https://github.com/RadeonOpenCompute/rbuild/archive/master.tar.gz numpy yapf==0.28.0 asciidoc CppHeaderParser setuptools wheel && \
+RUN pip3 install https://github.com/RadeonOpenCompute/rbuild/archive/master.tar.gz numpy yapf==0.28.0 asciidoc CppHeaderParser setuptools==69.5.1 wheel && \
     pip3 cache purge
 
 ENV PATH /opt/cmake-3.28.3-linux-x86_64/bin:/opt/miniconda/bin:${PATH}
