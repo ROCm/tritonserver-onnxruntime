@@ -160,11 +160,6 @@ RUN _CUDNN_VERSION=$(echo $CUDNN_VERSION | cut -d. -f1-2) && \
 """
 
     if FLAGS.enable_rocm:
-        if FLAGS.rocm_version is not None:
-            df += """ARG ROCM_VERSION={}""".format(FLAGS.rocm_version)
-        else:
-            df += """ARG ROCM_VERSION=5.7"""
-
         df += """
 # Set up locale
 RUN apt-get clean && apt-get update && apt-get install -y locales && \
@@ -178,18 +173,30 @@ ENV PIP_BREAK_SYSTEM_PACKAGES=1
 # Support multiarch
 RUN dpkg --add-architecture i386
 
-# Install rocm
-RUN apt-get update && apt-get install -y gnupg2 --no-install-recommends curl && \
-curl -fsSL http://repo.radeon.com/rocm/rocm.gpg.key | gpg --dearmor -o /etc/apt/trusted.gpg.d/rocm-keyring.gpg && \
-sh -c 'echo deb [arch=amd64] http://repo.radeon.com/rocm/apt/${ROCM_VERSION}/ jammy main > /etc/apt/sources.list.d/rocm.list'
+# Check Linux distro and install ROCm accordingly
+# Debian: Install ROCm 7.0.1 from scratch (bare-metal build)
+# Ubuntu: Use pre-installed ROCm 7.0 from rocm/onnxruntime base image
+RUN . /etc/os-release && \\
+    if [ "$ID" = "debian" ]; then \\
+        echo "Debian detected - installing ROCm 7.0.1 from scratch"; \\
+        apt-get update && apt-get install -y gnupg2 wget curl && \\
+        wget https://repo.radeon.com/amdgpu-install/7.0.1/ubuntu/jammy/amdgpu-install_7.0.1.70001-1_all.deb && \\
+        apt-get install -y ./amdgpu-install_7.0.1.70001-1_all.deb && \\
+        rm amdgpu-install_7.0.1.70001-1_all.deb && \\
+        apt-get update && \\
+        apt-get install -y python3-setuptools python3-wheel && \\
+        apt-get install -y rocm-dev rocm-libs miopen-hip rocblas hipblas rocrand rccl rccl-dev hipsparse hipfft hipcub rocthrust hip-base rocm-device-libs hipify-clang miopen-hip-dev rocm-cmake && \\
+        rm -rf /var/lib/apt/lists/*; \\
+    else \\
+        echo "Ubuntu detected - using pre-installed ROCm 7.0 from base container"; \\
+        apt-get update && \\
+        apt-get install -y sudo git apt-utils bash build-essential curl doxygen gdb python3-dev python3-pip \\
+        aria2 libnuma-dev pkg-config ccache software-properties-common wget libssl-dev zlib1g-dev && \\
+        rm -rf /var/lib/apt/lists/*; \\
+    fi
 
-# From docs.amd.com for installing rocm. Needed to install properly
-RUN sh -c \"echo 'Package: *\\nPin: release o=repo.radeon.com\\nPin-priority: 600' > /etc/apt/preferences.d/rocm-pin-600\"
-
-RUN apt-get update &&\
-    apt-get install -y sudo git apt-utils bash build-essential curl doxygen gdb rocm-dev python3-dev python3-pip miopen-hip \
-    rocblas half aria2 libnuma-dev pkg-config ccache software-properties-common wget libnuma-dev libssl-dev zlib1g-dev && \
-    rm -rf /var/lib/apt/lists/*
+# Add user to video and render groups for GPU access
+RUN groupadd -f video && groupadd -f render
 
 RUN aria2c -q -d /tmp -o cmake-3.28.3-linux-x86_64.tar.gz \
 https://github.com/Kitware/CMake/releases/download/v3.28.3/cmake-3.28.3-linux-x86_64.tar.gz &&\
@@ -218,16 +225,18 @@ RUN apt-get update &&\
 """
 
     if FLAGS.ort_migraphx:
-        if FLAGS.migraphx_version is not None:
-            df+= """ARG MIGRAPHX_VERSION={}""".format(FLAGS.migraphx_version)
-        else:
-            df+= """ARG MIGRAPHX_VERSION=develop"""
-
         df += """
-    # Install MIGraphX from package manager
-    # Header files and libraries are installed under /opt/rocm-<version>, where <version> is the ROCm version.
-    RUN apt update && apt install -y migraphx && rm -rf /var/lib/apt/lists/*
-    """
+# Check Linux distro and install MIGraphX accordingly
+# Debian: Install MIGraphX from package manager (bare-metal build)
+# Ubuntu: Use pre-installed MIGraphX from rocm/onnxruntime base image
+RUN . /etc/os-release && \\
+    if [ "$ID" = "debian" ]; then \\
+        echo "Debian detected - installing MIGraphX from package manager"; \\
+        apt update && apt install -y migraphx && rm -rf /var/lib/apt/lists/*; \\
+    else \\
+        echo "Ubuntu detected - using pre-installed MIGraphX from base container"; \\
+    fi
+"""
 
 
     if FLAGS.ort_openvino is not None:
@@ -291,20 +300,31 @@ ENV PYTHONPATH $INTEL_OPENVINO_DIR/python/python3.10:$INTEL_OPENVINO_DIR/python/
     elif FLAGS.enable_rocm:
             df += """
     #
-    # ONNX Runtime for ROCm - use prebuilt wheel + clone source for headers
+    # ONNX Runtime for ROCm - check if already installed or use prebuilt wheel
     #
-    ARG ONNXRUNTIME_VERSION
     ARG ONNXRUNTIME_REPO
-    ARG ONNXRUNTIME_BUILD_CONFIG
 
-    # Install onnxruntime from prebuilt wheel
-    RUN wget https://repo.radeon.com/rocm/manylinux/rocm-rel-7.0/onnxruntime_rocm-1.22.1-cp310-cp310-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl && \
-        pip3 install onnxruntime_rocm-1.22.1-cp310-cp310-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl && \
-        rm onnxruntime_rocm-1.22.1-cp310-cp310-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl && \
-        pip3 cache purge
-
-    # Clone ONNX Runtime source to get header files (not building from source)
-    RUN git clone -b ${ONNXRUNTIME_VERSION} --depth=1 ${ONNXRUNTIME_REPO} onnxruntime
+    # Check Linux distro and install ONNX Runtime accordingly
+    # Debian: Install ONNX Runtime from prebuilt wheel and clone source for headers
+    # Ubuntu: Use pre-installed ONNX Runtime from rocm/onnxruntime base image (no clone needed)
+    RUN . /etc/os-release && \\
+        if [ "$ID" = "debian" ]; then \\
+            echo "Debian detected - installing ONNX Runtime from prebuilt wheel"; \\
+            wget https://repo.radeon.com/rocm/manylinux/rocm-rel-7.0/onnxruntime_rocm-1.22.1-cp310-cp310-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl && \\
+            pip3 install onnxruntime_rocm-1.22.1-cp310-cp310-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl && \\
+            rm onnxruntime_rocm-1.22.1-cp310-cp310-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl && \\
+            pip3 cache purge && \\
+            echo "Cloning ONNX Runtime source for header files"; \\
+            ORT_VERSION=$(python3 -c "import onnxruntime; print(onnxruntime.__version__)") && \\
+            echo "Cloning ONNX Runtime v$ORT_VERSION source" && \\
+            (git clone -b v$ORT_VERSION --depth=1 ${ONNXRUNTIME_REPO} onnxruntime || \\
+             git clone -b rel-$ORT_VERSION --depth=1 ${ONNXRUNTIME_REPO} onnxruntime || \\
+             (echo "Warning: Could not find branch v$ORT_VERSION or rel-$ORT_VERSION, using main" && \\
+              git clone --depth=1 ${ONNXRUNTIME_REPO} onnxruntime)); \\
+        else \\
+            echo "Ubuntu detected - using pre-installed ONNX Runtime 1.22 from base container"; \\
+            echo "Header files already available in system paths"; \\
+        fi
         """
 
     else:
@@ -354,8 +374,7 @@ ENV PYTHONPATH $INTEL_OPENVINO_DIR/python/python3.10:$INTEL_OPENVINO_DIR/python/
     ENV PATH="/opt/cmake-3.28.3-linux-x86_64/bin:$PATH"
     ENV CXXFLAGS="-D__HIP_PLATFORM_AMD__=1 -w"
             """
-        if FLAGS.rocm_version is not None:
-            ep_flags += ' --rocm_version "{}"'.format(FLAGS.rocm_version)
+        # ROCm version is determined by base container (7.0 for Ubuntu, 7.0.1 for Debian)
         if FLAGS.rocm_home is not None:
             ep_flags += ' --rocm_home "{}"'.format(FLAGS.rocm_home)
         if FLAGS.ort_migraphx:
@@ -416,26 +435,37 @@ ENV PYTHONPATH $INTEL_OPENVINO_DIR/python/python3.10:$INTEL_OPENVINO_DIR/python/
         ln -s libonnxruntime.so.1.22.1 libonnxruntime.so.1 && \
         ln -s libonnxruntime.so.1.22.1 libonnxruntime.so
 
-    # Copy header files from cloned source
-    RUN cp /workspace/onnxruntime/include/onnxruntime/core/session/onnxruntime_c_api.h /opt/onnxruntime/include/ && \
-        cp /workspace/onnxruntime/include/onnxruntime/core/session/onnxruntime_session_options_config_keys.h /opt/onnxruntime/include/ && \
-        cp /workspace/onnxruntime/include/onnxruntime/core/providers/cpu/cpu_provider_factory.h /opt/onnxruntime/include/ && \
-        cp /workspace/onnxruntime/LICENSE /opt/onnxruntime/ && \
-        cat /workspace/onnxruntime/cmake/external/onnx/VERSION_NUMBER > /opt/onnxruntime/ort_onnx_version.txt || echo "1.22.1" > /opt/onnxruntime/ort_onnx_version.txt
-
-    # Copy MIGraphX provider header if available
-    RUN if [ -f /workspace/onnxruntime/onnxruntime/core/providers/migraphx/migraphx_provider_factory.h ]; then \
-            cp /workspace/onnxruntime/onnxruntime/core/providers/migraphx/migraphx_provider_factory.h /opt/onnxruntime/include/; \
+    # Copy header files based on distro
+    # Debian: Copy from cloned source repository
+    # Ubuntu: Copy from system include paths (already installed in base image)
+    RUN . /etc/os-release && \\
+        if [ "$ID" = "debian" ]; then \\
+            echo "Copying header files from cloned source"; \\
+            cp /workspace/onnxruntime/include/onnxruntime/core/session/onnxruntime_c_api.h /opt/onnxruntime/include/ && \\
+            cp /workspace/onnxruntime/include/onnxruntime/core/session/onnxruntime_session_options_config_keys.h /opt/onnxruntime/include/ && \\
+            cp /workspace/onnxruntime/include/onnxruntime/core/providers/cpu/cpu_provider_factory.h /opt/onnxruntime/include/ && \\
+            cp /workspace/onnxruntime/LICENSE /opt/onnxruntime/ && \\
+            (cat /workspace/onnxruntime/cmake/external/onnx/VERSION_NUMBER > /opt/onnxruntime/ort_onnx_version.txt || echo "1.22.1" > /opt/onnxruntime/ort_onnx_version.txt) && \\
+            if [ -f /workspace/onnxruntime/onnxruntime/core/providers/migraphx/migraphx_provider_factory.h ]; then \\
+                cp /workspace/onnxruntime/onnxruntime/core/providers/migraphx/migraphx_provider_factory.h /opt/onnxruntime/include/; \\
+            fi && \\
+            rm -rf /workspace/onnxruntime; \\
+        else \\
+            echo "Copying header files from system paths"; \\
+            cp /usr/include/onnxruntime/core/session/onnxruntime_c_api.h /opt/onnxruntime/include/ && \\
+            cp /usr/include/onnxruntime/core/session/onnxruntime_session_options_config_keys.h /opt/onnxruntime/include/ && \\
+            cp /usr/include/onnxruntime/core/providers/cpu/cpu_provider_factory.h /opt/onnxruntime/include/ && \\
+            echo "1.22.0" > /opt/onnxruntime/ort_onnx_version.txt && \\
+            if [ -f /usr/include/onnxruntime/core/providers/migraphx/migraphx_provider_factory.h ]; then \\
+                cp /usr/include/onnxruntime/core/providers/migraphx/migraphx_provider_factory.h /opt/onnxruntime/include/; \\
+            fi; \\
         fi
 
     # Set RPATH for all .so files
-    RUN cd /opt/onnxruntime/lib && \
-        for i in $(find . -mindepth 1 -maxdepth 1 -type f -name '*.so*'); do \
-            patchelf --set-rpath '$ORIGIN' $i 2>/dev/null || true; \
+    RUN cd /opt/onnxruntime/lib && \\
+        for i in $(find . -mindepth 1 -maxdepth 1 -type f -name '*.so*'); do \\
+            patchelf --set-rpath '$ORIGIN' $i 2>/dev/null || true; \\
         done
-    
-    # Clean up: Remove the cloned source repository (only needed headers, already copied)
-    RUN rm -rf /workspace/onnxruntime
         """
     else:
         df += """
@@ -578,162 +608,159 @@ RUN mkdir -p /opt/onnxruntime/test
         dfile.write(df)
 
 
-    def dockerfile_for_windows(output_file):
-        df = dockerfile_common()
+def dockerfile_for_windows(output_file):
+    df = dockerfile_common()
 
-        ## TEMPORARY: Using the tensorrt-8.0 branch until ORT 1.9 release to enable ORT backend with TRT 8.0 support.
-        # For ORT versions 1.8.0 and below the behavior will remain same. For ORT version 1.8.1 we will
-        # use tensorrt-8.0 branch instead of using rel-1.8.1
-        # From ORT 1.9 onwards we will switch back to using rel-* branches
-        if FLAGS.ort_version == "1.8.1":
-            df += """
-    SHELL ["cmd", "/S", "/C"]
-
-    #
-    # ONNX Runtime build
-    #
-    ARG ONNXRUNTIME_VERSION
-    ARG ONNXRUNTIME_REPO
-
-    RUN git clone -b tensorrt-8.0 --recursive %ONNXRUNTIME_REPO% onnxruntime && \
-        (cd onnxruntime && git submodule update --init --recursive)
-    """
-        else:
-            df += """
-    SHELL ["cmd", "/S", "/C"]
-
-    #
-    # ONNX Runtime build
-    #
-    ARG ONNXRUNTIME_VERSION
-    ARG ONNXRUNTIME_REPO
-    RUN git clone -b %ONNXRUNTIME_VERSION% --recursive %ONNXRUNTIME_REPO% onnxruntime && \
-        (cd onnxruntime && git submodule update --init --recursive)
-    """
-
-        if FLAGS.onnx_tensorrt_tag != "":
-            df += """
-        RUN (cd \\workspace\\onnxruntime\\cmake\\external\\onnx-tensorrt && git fetch origin {}:ortrefbranch && git checkout ortrefbranch)
-        """.format(
-                FLAGS.onnx_tensorrt_tag
-            )
-
-        ep_flags = ""
-        if FLAGS.enable_gpu:
-            ep_flags = "--use_cuda --cmake_extra_defines \"CMAKE_CUDA_ARCHITECTURES=60;61;70;75;80;86;90\" "
-            if FLAGS.cuda_version is not None:
-                ep_flags += ' --cuda_version "{}"'.format(FLAGS.cuda_version)
-            if FLAGS.cuda_home is not None:
-                ep_flags += ' --cuda_home "{}"'.format(FLAGS.cuda_home)
-            if FLAGS.cudnn_home is not None:
-                ep_flags += ' --cudnn_home "{}"'.format(FLAGS.cudnn_home)
-            if FLAGS.ort_tensorrt:
-                ep_flags += " --use_tensorrt"
-                if FLAGS.tensorrt_home is not None:
-                    ep_flags += ' --tensorrt_home "{}"'.format(FLAGS.tensorrt_home)
-
-        if FLAGS.enable_rocm:
-            df += """
-    RUN sed -i 's/list(APPEND HIP_CLANG_FLAGS --amdgpu-target=gfx906 --amdgpu-target=gfx908)/list(APPEND HIP_CLANG_FLAGS --amdgpu-target=gfx906 --amdgpu-target=gfx908 --amdgpu-target=gfx90a --amdgpu-target=gfx1030)/g'  onnxruntime/cmake/onnxruntime_providers.cmake && \
-        sed -i 's/Version(torch.__version__) >= Version("1.11.0")/Version(torch.__version__).release >= Version("1.11.0").release/g' /workspace/onnxruntime/onnxruntime/python/tools/transformers/torch_onnx_export_helper.py; \
-    RUN export PATH="/opt/cmake-3.28.3-linux-x86_64/bin:$PATH"
-    RUN export CXXFLAGS="-D__HIP_PLATFORM_AMD__=1 -w"
-            """
-            ep_flags = "--cmake_extra_defines CMAKE_HIP_COMPILER=/opt/rocm/llvm/bin/clang++ --use_rocm --skip_tests"
-            #if FLAGS.rocm_version is not None:
-            #    ep_flags += ' --rocm_version={}'.format(FLAGS.rocm_version)
-            if FLAGS.rocm_home is not None:
-                ep_flags += ' --rocm_home {}'.format(FLAGS.rocm_home)
-            if FLAGS.ort_migraphx:
-                ep_flags += " --use_migraphx"
-                if FLAGS.migraphx_version is not None:
-                    ep_flags += ' --migraphx_version {}'.format(FLAGS.migraphx_version)
-                if FLAGS.migraphx_home is not None:
-                    ep_flags += ' --migraphx_home {}'.format(FLAGS.migraphx_home)
-
-            ep_flags += " --allow_running_as_root"
-
-        if FLAGS.ort_openvino is not None:
-            ep_flags += " --use_openvino CPU"
-
-
+    ## TEMPORARY: Using the tensorrt-8.0 branch until ORT 1.9 release to enable ORT backend with TRT 8.0 support.
+    # For ORT versions 1.8.0 and below the behavior will remain same. For ORT version 1.8.1 we will
+    # use tensorrt-8.0 branch instead of using rel-1.8.1
+    # From ORT 1.9 onwards we will switch back to using rel-* branches
+    if FLAGS.ort_version == "1.8.1":
         df += """
-    WORKDIR /workspace/onnxruntime
-    ARG VS_DEVCMD_BAT="\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
-    RUN powershell Set-Content 'build.bat' -value 'call %VS_DEVCMD_BAT%',(Get-Content 'build.bat')
-    RUN build.bat --cmake_generator "Visual Studio 17 2022" --config Release --skip_submodule_sync --parallel --build_shared_lib --update --build --build_dir /workspace/build {}
+SHELL ["cmd", "/S", "/C"]
+
+#
+# ONNX Runtime build
+#
+ARG ONNXRUNTIME_VERSION
+ARG ONNXRUNTIME_REPO
+
+RUN git clone -b tensorrt-8.0 --recursive %ONNXRUNTIME_REPO% onnxruntime && \
+    (cd onnxruntime && git submodule update --init --recursive)
+"""
+    else:
+        df += """
+SHELL ["cmd", "/S", "/C"]
+
+#
+# ONNX Runtime build
+#
+ARG ONNXRUNTIME_VERSION
+ARG ONNXRUNTIME_REPO
+RUN git clone -b %ONNXRUNTIME_VERSION% --recursive %ONNXRUNTIME_REPO% onnxruntime && \
+    (cd onnxruntime && git submodule update --init --recursive)
+"""
+
+    if FLAGS.onnx_tensorrt_tag != "":
+        df += """
+    RUN (cd \\workspace\\onnxruntime\\cmake\\external\\onnx-tensorrt && git fetch origin {}:ortrefbranch && git checkout ortrefbranch)
     """.format(
-            ep_flags
+            FLAGS.onnx_tensorrt_tag
         )
 
-        df += """
-    #
-    # Copy all artifacts needed by the backend to /opt/onnxruntime
-    #
-    WORKDIR /opt/onnxruntime
-    RUN copy \\workspace\\onnxruntime\\LICENSE \\opt\\onnxruntime
-    RUN copy \\workspace\\onnxruntime\\cmake\\external\\onnx\\VERSION_NUMBER \\opt\\onnxruntime\\ort_onnx_version.txt
-
-    # ONNX Runtime headers, libraries and binaries
-    WORKDIR /opt/onnxruntime/include
-    RUN copy \\workspace\\onnxruntime\\include\\onnxruntime\\core\\session\\onnxruntime_c_api.h \\opt\\onnxruntime\\include
-    RUN copy \\workspace\\onnxruntime\\include\\onnxruntime\\core\\session\\onnxruntime_session_options_config_keys.h \\opt\\onnxruntime\\include
-    RUN copy \\workspace\\onnxruntime\\include\\onnxruntime\\core\\providers\\cpu\\cpu_provider_factory.h \\opt\\onnxruntime\\include
-
-    WORKDIR /opt/onnxruntime/bin
-    RUN copy \\workspace\\build\\Release\\Release\\onnxruntime.dll \\opt\\onnxruntime\\bin
-    RUN copy \\workspace\\build\\Release\\Release\\onnxruntime_providers_shared.dll \\opt\\onnxruntime\\bin
-    RUN copy \\workspace\\build\\Release\\Release\\onnxruntime_perf_test.exe \\opt\\onnxruntime\\bin
-    RUN copy \\workspace\\build\\Release\\Release\\onnx_test_runner.exe \\opt\\onnxruntime\\bin
-
-    WORKDIR /opt/onnxruntime/lib
-    RUN copy \\workspace\\build\\Release\\Release\\onnxruntime.lib \\opt\\onnxruntime\\lib
-    RUN copy \\workspace\\build\\Release\\Release\\onnxruntime_providers_shared.lib \\opt\\onnxruntime\\lib
-    """
-
-        if FLAGS.enable_gpu:
-            df += """
-    WORKDIR /opt/onnxruntime/lib
-    RUN copy \\workspace\\build\\Release\\Release\\onnxruntime_providers_cuda.lib \\opt\\onnxruntime\\lib
-    WORKDIR /opt/onnxruntime/bin
-    RUN copy \\workspace\\build\\Release\\Release\\onnxruntime_providers_cuda.dll \\opt\\onnxruntime\\bin
-    """
-
-        if FLAGS.enable_rocm:
-            df += """
-    WORKDIR /opt/onnxruntime/lib
-    RUN copy \\workspace\\build\\Release\\Release\\onnxruntime_providers_rocm.lib \\opt\\onnxruntime\\lib
-    WORKDIR /opt/onnxruntime/bin
-    RUN copy \\workspace\\build\\Release\\Release\\onnxruntime_providers_rocm.dll \\opt\\onnxruntime\\bin
-    """
-
+    ep_flags = ""
+    if FLAGS.enable_gpu:
+        ep_flags = "--use_cuda --cmake_extra_defines \"CMAKE_CUDA_ARCHITECTURES=60;61;70;75;80;86;90\" "
+        if FLAGS.cuda_version is not None:
+            ep_flags += ' --cuda_version "{}"'.format(FLAGS.cuda_version)
+        if FLAGS.cuda_home is not None:
+            ep_flags += ' --cuda_home "{}"'.format(FLAGS.cuda_home)
+        if FLAGS.cudnn_home is not None:
+            ep_flags += ' --cudnn_home "{}"'.format(FLAGS.cudnn_home)
         if FLAGS.ort_tensorrt:
-            df += """
-    # TensorRT specific headers and libraries
-    WORKDIR /opt/onnxruntime/include
-    RUN copy \\workspace\\onnxruntime\\include\\onnxruntime\\core\\providers\\tensorrt\\tensorrt_provider_factory.h \\opt\\onnxruntime\\include
+            ep_flags += " --use_tensorrt"
+            if FLAGS.tensorrt_home is not None:
+                ep_flags += ' --tensorrt_home "{}"'.format(FLAGS.tensorrt_home)
 
-    WORKDIR /opt/onnxruntime/lib
-    RUN copy \\workspace\\build\\Release\\Release\\onnxruntime_providers_tensorrt.dll \\opt\\onnxruntime\\bin
-
-    WORKDIR /opt/onnxruntime/lib
-    RUN copy \\workspace\\build\\Release\\Release\\onnxruntime_providers_tensorrt.lib \\opt\\onnxruntime\\lib
-    """
-
+    if FLAGS.enable_rocm:
+        df += """
+RUN sed -i 's/list(APPEND HIP_CLANG_FLAGS --amdgpu-target=gfx906 --amdgpu-target=gfx908)/list(APPEND HIP_CLANG_FLAGS --amdgpu-target=gfx906 --amdgpu-target=gfx908 --amdgpu-target=gfx90a --amdgpu-target=gfx1030)/g'  onnxruntime/cmake/onnxruntime_providers.cmake && \
+    sed -i 's/Version(torch.__version__) >= Version("1.11.0")/Version(torch.__version__).release >= Version("1.11.0").release/g' /workspace/onnxruntime/onnxruntime/python/tools/transformers/torch_onnx_export_helper.py; \
+RUN export PATH="/opt/cmake-3.28.3-linux-x86_64/bin:$PATH"
+RUN export CXXFLAGS="-D__HIP_PLATFORM_AMD__=1 -w"
+        """
+        ep_flags = "--cmake_extra_defines CMAKE_HIP_COMPILER=/opt/rocm/llvm/bin/clang++ --use_rocm --skip_tests"
+        # ROCm and MIGraphX versions are determined by base container
+        if FLAGS.rocm_home is not None:
+            ep_flags += ' --rocm_home {}'.format(FLAGS.rocm_home)
         if FLAGS.ort_migraphx:
-            df += """
-    # MIGraphX specific headers and libraries
-    WORKDIR /opt/onnxruntime/include
-    RUN copy \\workspace\\onnxruntime\\onnxruntime\\core\\providers\\migraphx\\migraphx_provider_factory.h \\opt\\onnxruntime\\include
+            ep_flags += " --use_migraphx"
+            if FLAGS.migraphx_home is not None:
+                ep_flags += ' --migraphx_home {}'.format(FLAGS.migraphx_home)
 
-    WORKDIR /opt/onnxruntime/lib
-    RUN copy \\workspace\\build\\Release\\Release\\onnxruntime_providers_migraphx.dll \\opt\\onnxruntime\\bin
+        ep_flags += " --allow_running_as_root"
 
-    WORKDIR /opt/onnxruntime/lib
-    RUN copy \\workspace\\build\\Release\\Release\\onnxruntime_providers_migraphx.lib \\opt\\onnxruntime\\lib
-    """
-        with open(output_file, "w") as dfile:
-            dfile.write(df)
+    if FLAGS.ort_openvino is not None:
+        ep_flags += " --use_openvino CPU"
+
+
+    df += """
+WORKDIR /workspace/onnxruntime
+ARG VS_DEVCMD_BAT="\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
+RUN powershell Set-Content 'build.bat' -value 'call %VS_DEVCMD_BAT%',(Get-Content 'build.bat')
+RUN build.bat --cmake_generator "Visual Studio 17 2022" --config Release --skip_submodule_sync --parallel --build_shared_lib --update --build --build_dir /workspace/build {}
+""".format(
+        ep_flags
+    )
+
+    df += """
+#
+# Copy all artifacts needed by the backend to /opt/onnxruntime
+#
+WORKDIR /opt/onnxruntime
+RUN copy \\workspace\\onnxruntime\\LICENSE \\opt\\onnxruntime
+RUN copy \\workspace\\onnxruntime\\cmake\\external\\onnx\\VERSION_NUMBER \\opt\\onnxruntime\\ort_onnx_version.txt
+
+# ONNX Runtime headers, libraries and binaries
+WORKDIR /opt/onnxruntime/include
+RUN copy \\workspace\\onnxruntime\\include\\onnxruntime\\core\\session\\onnxruntime_c_api.h \\opt\\onnxruntime\\include
+RUN copy \\workspace\\onnxruntime\\include\\onnxruntime\\core\\session\\onnxruntime_session_options_config_keys.h \\opt\\onnxruntime\\include
+RUN copy \\workspace\\onnxruntime\\include\\onnxruntime\\core\\providers\\cpu\\cpu_provider_factory.h \\opt\\onnxruntime\\include
+
+WORKDIR /opt/onnxruntime/bin
+RUN copy \\workspace\\build\\Release\\Release\\onnxruntime.dll \\opt\\onnxruntime\\bin
+RUN copy \\workspace\\build\\Release\\Release\\onnxruntime_providers_shared.dll \\opt\\onnxruntime\\bin
+RUN copy \\workspace\\build\\Release\\Release\\onnxruntime_perf_test.exe \\opt\\onnxruntime\\bin
+RUN copy \\workspace\\build\\Release\\Release\\onnx_test_runner.exe \\opt\\onnxruntime\\bin
+
+WORKDIR /opt/onnxruntime/lib
+RUN copy \\workspace\\build\\Release\\Release\\onnxruntime.lib \\opt\\onnxruntime\\lib
+RUN copy \\workspace\\build\\Release\\Release\\onnxruntime_providers_shared.lib \\opt\\onnxruntime\\lib
+"""
+
+    if FLAGS.enable_gpu:
+        df += """
+WORKDIR /opt/onnxruntime/lib
+RUN copy \\workspace\\build\\Release\\Release\\onnxruntime_providers_cuda.lib \\opt\\onnxruntime\\lib
+WORKDIR /opt/onnxruntime/bin
+RUN copy \\workspace\\build\\Release\\Release\\onnxruntime_providers_cuda.dll \\opt\\onnxruntime\\bin
+"""
+
+    if FLAGS.enable_rocm:
+        df += """
+WORKDIR /opt/onnxruntime/lib
+RUN copy \\workspace\\build\\Release\\Release\\onnxruntime_providers_rocm.lib \\opt\\onnxruntime\\lib
+WORKDIR /opt/onnxruntime/bin
+RUN copy \\workspace\\build\\Release\\Release\\onnxruntime_providers_rocm.dll \\opt\\onnxruntime\\bin
+"""
+
+    if FLAGS.ort_tensorrt:
+        df += """
+# TensorRT specific headers and libraries
+WORKDIR /opt/onnxruntime/include
+RUN copy \\workspace\\onnxruntime\\include\\onnxruntime\\core\\providers\\tensorrt\\tensorrt_provider_factory.h \\opt\\onnxruntime\\include
+
+WORKDIR /opt/onnxruntime/lib
+RUN copy \\workspace\\build\\Release\\Release\\onnxruntime_providers_tensorrt.dll \\opt\\onnxruntime\\bin
+
+WORKDIR /opt/onnxruntime/lib
+RUN copy \\workspace\\build\\Release\\Release\\onnxruntime_providers_tensorrt.lib \\opt\\onnxruntime\\lib
+"""
+
+    if FLAGS.ort_migraphx:
+        df += """
+# MIGraphX specific headers and libraries
+WORKDIR /opt/onnxruntime/include
+RUN copy \\workspace\\onnxruntime\\onnxruntime\\core\\providers\\migraphx\\migraphx_provider_factory.h \\opt\\onnxruntime\\include
+
+WORKDIR /opt/onnxruntime/lib
+RUN copy \\workspace\\build\\Release\\Release\\onnxruntime_providers_migraphx.dll \\opt\\onnxruntime\\bin
+
+WORKDIR /opt/onnxruntime/lib
+RUN copy \\workspace\\build\\Release\\Release\\onnxruntime_providers_migraphx.lib \\opt\\onnxruntime\\lib
+"""
+    with open(output_file, "w") as dfile:
+        dfile.write(df)
 
 def preprocess_gpu_flags():
     if target_platform() == "windows":

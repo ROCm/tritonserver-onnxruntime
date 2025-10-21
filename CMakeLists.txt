@@ -103,7 +103,6 @@ project(tritononnxruntimebackend LANGUAGES C CXX)
 #
 #   - If you want ROCm support set
 #     TRITON_ENABLE_ONNXRUNTIME_ROCM=ON and set
-#     TRITON_BUILD_ONNXRUNTIME_ROCM_VERSION to the ROCm stack
 #     version that is compatible with the specified version of ONNX
 #     Runtime.
 #
@@ -129,7 +128,6 @@ option(TRITON_ENABLE_ONNXRUNTIME_MIGRAPHX
   "Enable MIGraphX execution provider for ONNXRuntime backend in server" OFF)
 option(TRITON_ENABLE_ONNXRUNTIME_OPENVINO
   "Enable OpenVINO execution provider for ONNXRuntime backend in server" OFF)
-set(TRITON_BUILD_ROCM_VERSION "" CACHE STRING "Version of ROCm install")
 set(TRITON_BUILD_ROCM_HOME "" CACHE PATH "Path to ROCm install")
 set(TRITON_BUILD_MIGRAPHX_VERSION "" CACHE STRING "Version of MIGraphX install")
 set(TRITON_BUILD_MIGRAPHX_HOME "" CACHE PATH "Path to MIGraphX install")
@@ -203,10 +201,10 @@ else()
   if(NOT TRITON_BUILD_CONTAINER)
     if (TRITON_ENABLE_ROCM)
       if (TRITON_LINUX_DISTRO STREQUAL "debian")
-        # set(TRITON_BUILD_CONTAINER "aisdkshared/private:rocm7.0_debian12_py3.10_pytorch_release_2.8.0")
         set(TRITON_BUILD_CONTAINER "aisdkshared/private:rocm7.0_debian12_py3.10")
       else()
-        set(TRITON_BUILD_CONTAINER "rocm/pytorch:rocm7.0_ubuntu22.04_py3.10_pytorch_release_2.8.0")
+        # Use ROCm ONNX Runtime container which includes ORT 1.22 and MIGraphX
+        set(TRITON_BUILD_CONTAINER "rocm/onnxruntime:rocm7.0_ub22.04_ort1.22_torch2.8.0")
       endif()
       set(TRITON_ONNXRUNTIME_INCLUDE_PATHS ${TRITON_ONNXRUNTIME_INCLUDE_PATHS} /opt/rocm/include/hip /tmp/tritonbuild/onnxruntime_backend/build/onnxruntime/include)
     else()
@@ -435,9 +433,6 @@ if(TRITON_ONNXRUNTIME_DOCKER_BUILD)
   if(${TRITON_ENABLE_ONNXRUNTIME_OPENVINO})
     set(_GEN_FLAGS ${_GEN_FLAGS} "--ort-openvino=${TRITON_BUILD_ONNXRUNTIME_OPENVINO_VERSION}")
   endif() # TRITON_ENABLE_ONNXRUNTIME_OPENVINO
-  if(NOT ${TRITON_BUILD_ROCM_VERSION} STREQUAL "")
-    set(_GEN_FLAGS ${_GEN_FLAGS} "--rocm-version=${TRITON_BUILD_ROCM_VERSION}")
-  endif() # TRITON_BUILD_ROCM_VERSION
   if(NOT ${TRITON_BUILD_ROCM_HOME} STREQUAL "")
     set(_GEN_FLAGS ${_GEN_FLAGS} "--rocm-home=${TRITON_BUILD_ROCM_HOME}")
   endif() # TRITON_BUILD_ROCM_HOME
