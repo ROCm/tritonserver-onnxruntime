@@ -201,7 +201,8 @@ else()
   if(NOT TRITON_BUILD_CONTAINER)
     if (TRITON_ENABLE_ROCM)
       if (TRITON_LINUX_DISTRO STREQUAL "debian")
-        set(TRITON_BUILD_CONTAINER "debian:12")
+        # Use Debian 12 + ROCm + Python 3.10 base image
+        set(TRITON_BUILD_CONTAINER "local/debian12_rocm7.0_py310")
       else()
         # Use ROCm ONNX Runtime container which includes ORT 1.22 and MIGraphX
         set(TRITON_BUILD_CONTAINER "rocm/onnxruntime:rocm7.0_ub22.04_ort1.22_torch2.8.0")

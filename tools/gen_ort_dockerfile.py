@@ -175,26 +175,14 @@ RUN dpkg --add-architecture i386
 
 # Check Linux distro and install ROCm accordingly
 # Debian: Install ROCm 7.0.1 from scratch (bare-metal build)
-# Ubuntu: Use pre-installed ROCm 7.0 from rocm/onnxruntime base image
-RUN . /etc/os-release && \\
-    if [ "$ID" = "debian" ]; then \\
-        echo "Debian detected - installing ROCm 7.0.1 from scratch"; \\
-        apt-get update && apt-get install -y gnupg2 wget curl && \\
-        wget https://repo.radeon.com/amdgpu-install/7.0.1/ubuntu/jammy/amdgpu-install_7.0.1.70001-1_all.deb && \\
-        apt-get install -y ./amdgpu-install_7.0.1.70001-1_all.deb && \\
-        rm amdgpu-install_7.0.1.70001-1_all.deb && \\
-        apt-get update && \\
-        apt-get install -y python3-setuptools python3-wheel && \\
-        apt-get install -y rocm-dev rocm-libs miopen-hip rocblas hipblas rocrand rccl rccl-dev hipsparse hipfft hipcub rocthrust hip-base rocm-device-libs hipify-clang miopen-hip-dev rocm-cmake && \\
-        apt-get install -y sudo git apt-utils bash build-essential curl doxygen gdb python3-dev python3-pip aria2 libnuma-dev pkg-config ccache software-properties-common libssl-dev zlib1g-dev && \\
-        rm -rf /var/lib/apt/lists/*; \\
-    else \\
-        echo "Ubuntu detected - using pre-installed ROCm 7.0 from base container"; \\
-        apt-get update && \\
-        apt-get install -y sudo git apt-utils bash build-essential curl doxygen gdb python3-dev python3-pip \\
-        aria2 libnuma-dev pkg-config ccache software-properties-common wget libssl-dev zlib1g-dev && \\
-        rm -rf /var/lib/apt/lists/*; \\
-    fi
+# ROCm and Python 3.10 already installed in base image for Debian
+# Just install build tools and utilities
+RUN apt-get update && \\
+    apt-get install -y --no-install-recommends \\
+        sudo git apt-utils bash build-essential curl doxygen gdb \\
+        python3-dev python3-pip aria2 libnuma-dev pkg-config ccache \\
+        software-properties-common wget libssl-dev zlib1g-dev && \\
+    rm -rf /var/lib/apt/lists/*
 
 # Add user to video and render groups for GPU access
 RUN groupadd -f video && groupadd -f render
@@ -217,26 +205,15 @@ RUN mv /opt/conda/envs/py_3.10/bin/cmake /opt/conda/envs/py_3.10/bin/cmake.old |
     mv /opt/conda/envs/py_3.10/bin/ctest /opt/conda/envs/py_3.10/bin/ctest.old || true && \
     cmake --version && which cmake && \
     echo "CMake path verification:" && ls -la /opt/cmake-3.28.3-linux-x86_64/bin/cmake
-# Install rocm ep dependencies
-RUN apt-get update &&\
-    apt-get install -y rocrand rccl rccl-dev hipsparse hipfft hipcub hipblas rocthrust hip-base rocm-device-libs hipify-clang miopen-hip-dev rocm-cmake && \
-    rm -rf /var/lib/apt/lists/*
 
+# ROCm dependencies already installed in base image
 # Note: hipmagma/torch-magma are PyTorch dependencies, not needed for ONNX Runtime backend
 """
 
     if FLAGS.ort_migraphx:
         df += """
-# Check Linux distro and install MIGraphX accordingly
-# Debian: Install MIGraphX from package manager (bare-metal build)
-# Ubuntu: Use pre-installed MIGraphX from rocm/onnxruntime base image
-RUN . /etc/os-release && \\
-    if [ "$ID" = "debian" ]; then \\
-        echo "Debian detected - installing MIGraphX from package manager"; \\
-        apt update && apt install -y migraphx && rm -rf /var/lib/apt/lists/*; \\
-    else \\
-        echo "Ubuntu detected - using pre-installed MIGraphX from base container"; \\
-    fi
+# MIGraphX already installed in base image (Debian) or container (Ubuntu)
+RUN echo "MIGraphX pre-installed in base image"
 """
 
 
