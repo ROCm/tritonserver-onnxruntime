@@ -161,59 +161,28 @@ RUN _CUDNN_VERSION=$(echo $CUDNN_VERSION | cut -d. -f1-2) && \
 
     if FLAGS.enable_rocm:
         df += """
-# Set up locale
-RUN apt-get clean && apt-get update && apt-get install -y locales && \
-    locale-gen en_US.UTF-8
-ENV LC_ALL=C.UTF-8
-ENV LANG=C.UTF-8
-
-# Allow pip to install packages system-wide (needed for Debian 12+)
-ENV PIP_BREAK_SYSTEM_PACKAGES=1
-
-# Support multiarch
-RUN dpkg --add-architecture i386
-
-# Check Linux distro and install ROCm accordingly
-# Debian: Install ROCm 7.0.1 from scratch (bare-metal build)
-# ROCm and Python 3.10 already installed in base image for Debian
+# ROCm, MIGraphX, and ONNX Runtime already installed in base image
 # Just install build tools and utilities
 RUN apt-get update && \\
     apt-get install -y --no-install-recommends \\
-        sudo git apt-utils bash build-essential curl doxygen gdb \\
+        sudo git apt-utils bash build-essential curl \\
         python3-dev python3-pip aria2 libnuma-dev pkg-config ccache \\
-        software-properties-common wget libssl-dev zlib1g-dev && \\
+        software-properties-common wget libssl-dev zlib1g-dev patchelf && \\
     rm -rf /var/lib/apt/lists/*
 
 # Add user to video and render groups for GPU access
 RUN groupadd -f video && groupadd -f render
 
-RUN aria2c -q -d /tmp -o cmake-3.28.3-linux-x86_64.tar.gz \
-https://github.com/Kitware/CMake/releases/download/v3.28.3/cmake-3.28.3-linux-x86_64.tar.gz &&\
-tar -zxf /tmp/cmake-3.28.3-linux-x86_64.tar.gz -C /opt &&\
-ln -sf /opt/cmake-3.28.3-linux-x86_64/bin/cmake /usr/local/bin/cmake &&\
-ln -sf /opt/cmake-3.28.3-linux-x86_64/bin/ctest /usr/local/bin/ctest &&\
-ln -sf /opt/cmake-3.28.3-linux-x86_64/bin/cpack /usr/local/bin/cpack && \
-rm -f /tmp/cmake-3.28.3-linux-x86_64.tar.gz
+# Install CMake 3.28.3
+RUN wget -q https://github.com/Kitware/CMake/releases/download/v3.28.3/cmake-3.28.3-linux-x86_64.tar.gz && \\
+    tar -zxf cmake-3.28.3-linux-x86_64.tar.gz -C /opt && \\
+    rm cmake-3.28.3-linux-x86_64.tar.gz && \\
+    ln -sf /opt/cmake-3.28.3-linux-x86_64/bin/cmake /usr/local/bin/cmake && \\
+    ln -sf /opt/cmake-3.28.3-linux-x86_64/bin/ctest /usr/local/bin/ctest && \\
+    ln -sf /opt/cmake-3.28.3-linux-x86_64/bin/cpack /usr/local/bin/cpack && \\
+    cmake --version
 
-# Install rbuild
-RUN pip3 install https://github.com/RadeonOpenCompute/rbuild/archive/master.tar.gz numpy yapf==0.28.0 asciidoc CppHeaderParser setuptools==69.5.1 wheel && \
-    pip3 cache purge
-
-ENV PATH /opt/cmake-3.28.3-linux-x86_64/bin:/opt/miniconda/bin:${PATH}
-# Remove conda cmake to avoid conflicts and verify our CMake version
-RUN mv /opt/conda/envs/py_3.10/bin/cmake /opt/conda/envs/py_3.10/bin/cmake.old || true && \
-    mv /opt/conda/envs/py_3.10/bin/ctest /opt/conda/envs/py_3.10/bin/ctest.old || true && \
-    cmake --version && which cmake && \
-    echo "CMake path verification:" && ls -la /opt/cmake-3.28.3-linux-x86_64/bin/cmake
-
-# ROCm dependencies already installed in base image
-# Note: hipmagma/torch-magma are PyTorch dependencies, not needed for ONNX Runtime backend
-"""
-
-    if FLAGS.ort_migraphx:
-        df += """
-# MIGraphX already installed in base image (Debian) or container (Ubuntu)
-RUN echo "MIGraphX pre-installed in base image"
+ENV PATH /opt/cmake-3.28.3-linux-x86_64/bin:${PATH}
 """
 
 
@@ -278,31 +247,20 @@ ENV PYTHONPATH $INTEL_OPENVINO_DIR/python/python3.10:$INTEL_OPENVINO_DIR/python/
     elif FLAGS.enable_rocm:
             df += """
     #
-    # ONNX Runtime for ROCm - check if already installed or use prebuilt wheel
+    # ONNX Runtime for ROCm - already installed in base image
+    # Just clone source for header files
     #
     ARG ONNXRUNTIME_REPO
 
-    # Check Linux distro and install ONNX Runtime accordingly
-    # Debian: Install ONNX Runtime from prebuilt wheel and clone source for headers
-    # Ubuntu: Use pre-installed ONNX Runtime from rocm/onnxruntime base image (no clone needed)
-    RUN . /etc/os-release && \\
-        if [ "$ID" = "debian" ]; then \\
-            echo "Debian detected - installing ONNX Runtime from prebuilt wheel"; \\
-            wget https://repo.radeon.com/rocm/manylinux/rocm-rel-7.0/onnxruntime_rocm-1.22.1-cp310-cp310-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl && \\
-            pip3 install --timeout=300 --retries=5 onnxruntime_rocm-1.22.1-cp310-cp310-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl && \\
-            rm onnxruntime_rocm-1.22.1-cp310-cp310-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl && \\
-            pip3 cache purge && \\
-            echo "Cloning ONNX Runtime source for header files"; \\
-            ORT_VERSION=$(python3 -c "import onnxruntime; print(onnxruntime.__version__)") && \\
-            echo "Cloning ONNX Runtime v$ORT_VERSION source" && \\
-            (git clone -b v$ORT_VERSION --depth=1 ${ONNXRUNTIME_REPO} onnxruntime || \\
-             git clone -b rel-$ORT_VERSION --depth=1 ${ONNXRUNTIME_REPO} onnxruntime || \\
-             (echo "Warning: Could not find branch v$ORT_VERSION or rel-$ORT_VERSION, using main" && \\
-              git clone --depth=1 ${ONNXRUNTIME_REPO} onnxruntime)); \\
-        else \\
-            echo "Ubuntu detected - using pre-installed ONNX Runtime 1.22 from base container"; \\
-            echo "Header files already available in system paths"; \\
-        fi
+    # Clone ONNX Runtime source for header files only
+    # Both Debian and Ubuntu base images have ONNX Runtime pre-installed
+    RUN echo "ONNX Runtime and MIGraphX already installed in base image" && \\
+        ORT_VERSION=$(python3 -c "import onnxruntime; print(onnxruntime.__version__)") && \\
+        echo "Cloning ONNX Runtime v$ORT_VERSION source for header files" && \\
+        (git clone -b v$ORT_VERSION --depth=1 ${ONNXRUNTIME_REPO} onnxruntime || \\
+         git clone -b rel-$ORT_VERSION --depth=1 ${ONNXRUNTIME_REPO} onnxruntime || \\
+         (echo "Warning: Could not find branch v$ORT_VERSION or rel-$ORT_VERSION, using main" && \\
+          git clone --depth=1 ${ONNXRUNTIME_REPO} onnxruntime))
         """
 
     else:
@@ -389,10 +347,10 @@ ENV PYTHONPATH $INTEL_OPENVINO_DIR/python/python3.10:$INTEL_OPENVINO_DIR/python/
         )
 
     if FLAGS.enable_rocm:
-        # For ROCm, skip build - use prebuilt wheel libraries instead
+        # For ROCm, copy libraries and headers from installed packages
         df += """
     #
-    # Extract and copy ONNX Runtime artifacts from wheel to /opt/onnxruntime
+    # Copy ONNX Runtime artifacts from base image installation to /opt/onnxruntime
     #
     WORKDIR /workspace
 
@@ -402,7 +360,7 @@ ENV PYTHONPATH $INTEL_OPENVINO_DIR/python/python3.10:$INTEL_OPENVINO_DIR/python/
         mkdir -p /opt/onnxruntime/bin
 
     # Copy libraries from the installed wheel to /opt/onnxruntime/lib/
-    # Dynamically find the site-packages directory
+    # ONNX Runtime is already installed in base image
     RUN SITE_PACKAGES=$(python3 -c "import site; print(site.getsitepackages()[0])") && \
         echo "Found site-packages at: $SITE_PACKAGES" && \
         cp $SITE_PACKAGES/onnxruntime/capi/libonnxruntime.so.* /opt/onnxruntime/lib/ && \
@@ -413,36 +371,22 @@ ENV PYTHONPATH $INTEL_OPENVINO_DIR/python/python3.10:$INTEL_OPENVINO_DIR/python/
         ln -s libonnxruntime.so.1.22.1 libonnxruntime.so.1 && \
         ln -s libonnxruntime.so.1.22.1 libonnxruntime.so
 
-    # Copy header files based on distro
-    # Debian: Copy from cloned source repository
-    # Ubuntu: Copy from system include paths (already installed in base image)
-    RUN . /etc/os-release && \\
-        if [ "$ID" = "debian" ]; then \\
-            echo "Copying header files from cloned source"; \\
-            cp /workspace/onnxruntime/include/onnxruntime/core/session/onnxruntime_c_api.h /opt/onnxruntime/include/ && \\
-            cp /workspace/onnxruntime/include/onnxruntime/core/session/onnxruntime_session_options_config_keys.h /opt/onnxruntime/include/ && \\
-            cp /workspace/onnxruntime/include/onnxruntime/core/providers/cpu/cpu_provider_factory.h /opt/onnxruntime/include/ && \\
-            cp /workspace/onnxruntime/LICENSE /opt/onnxruntime/ && \\
-            (cat /workspace/onnxruntime/cmake/external/onnx/VERSION_NUMBER > /opt/onnxruntime/ort_onnx_version.txt || echo "1.22.1" > /opt/onnxruntime/ort_onnx_version.txt) && \\
-            if [ -f /workspace/onnxruntime/onnxruntime/core/providers/migraphx/migraphx_provider_factory.h ]; then \\
-                cp /workspace/onnxruntime/onnxruntime/core/providers/migraphx/migraphx_provider_factory.h /opt/onnxruntime/include/; \\
-            fi && \\
-            rm -rf /workspace/onnxruntime; \\
-        else \\
-            echo "Copying header files from system paths"; \\
-            cp /usr/include/onnxruntime/core/session/onnxruntime_c_api.h /opt/onnxruntime/include/ && \\
-            cp /usr/include/onnxruntime/core/session/onnxruntime_session_options_config_keys.h /opt/onnxruntime/include/ && \\
-            cp /usr/include/onnxruntime/core/providers/cpu/cpu_provider_factory.h /opt/onnxruntime/include/ && \\
-            echo "1.22.0" > /opt/onnxruntime/ort_onnx_version.txt && \\
-            if [ -f /usr/include/onnxruntime/core/providers/migraphx/migraphx_provider_factory.h ]; then \\
-                cp /usr/include/onnxruntime/core/providers/migraphx/migraphx_provider_factory.h /opt/onnxruntime/include/; \\
-            fi; \\
-        fi
+    # Copy header files from cloned source repository
+    RUN echo "Copying header files from cloned source" && \
+        cp /workspace/onnxruntime/include/onnxruntime/core/session/onnxruntime_c_api.h /opt/onnxruntime/include/ && \
+        cp /workspace/onnxruntime/include/onnxruntime/core/session/onnxruntime_session_options_config_keys.h /opt/onnxruntime/include/ && \
+        cp /workspace/onnxruntime/include/onnxruntime/core/providers/cpu/cpu_provider_factory.h /opt/onnxruntime/include/ && \
+        cp /workspace/onnxruntime/LICENSE /opt/onnxruntime/ && \
+        (cat /workspace/onnxruntime/cmake/external/onnx/VERSION_NUMBER > /opt/onnxruntime/ort_onnx_version.txt || echo "1.22.1" > /opt/onnxruntime/ort_onnx_version.txt) && \
+        if [ -f /workspace/onnxruntime/onnxruntime/core/providers/migraphx/migraphx_provider_factory.h ]; then \
+            cp /workspace/onnxruntime/onnxruntime/core/providers/migraphx/migraphx_provider_factory.h /opt/onnxruntime/include/; \
+        fi && \
+        rm -rf /workspace/onnxruntime
 
     # Set RPATH for all .so files
-    RUN cd /opt/onnxruntime/lib && \\
-        for i in $(find . -mindepth 1 -maxdepth 1 -type f -name '*.so*'); do \\
-            patchelf --set-rpath '$ORIGIN' $i 2>/dev/null || true; \\
+    RUN cd /opt/onnxruntime/lib && \
+        for i in $(find . -mindepth 1 -maxdepth 1 -type f -name '*.so*'); do \
+            patchelf --set-rpath '$ORIGIN' $i 2>/dev/null || true; \
         done
         """
     else:
@@ -871,10 +815,7 @@ if __name__ == "__main__":
         required=False,
         help="Enable MIGraphX execution provider.",
     )
-    parser.add_argument(
-        "--migraphx-home", type=str, required=False, help="Home directory for MIGraphX."
-    )
-    parser.add_argument("--migraphx-version", type=str, default="", help="MIGraphX version.")
+
 
     FLAGS = parser.parse_args()
     if FLAGS.enable_gpu or FLAGS.enable_rocm:
