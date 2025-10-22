@@ -315,11 +315,8 @@ ENV PYTHONPATH $INTEL_OPENVINO_DIR/python/python3.10:$INTEL_OPENVINO_DIR/python/
             ep_flags += ' --rocm_home "{}"'.format(FLAGS.rocm_home)
         if FLAGS.ort_migraphx:
             ep_flags += " --use_migraphx"
-            if FLAGS.migraphx_home is not None:
-                ep_flags += ' --migraphx_home "{}"'.format(FLAGS.migraphx_home)
-            else:
-                # Default to /opt/rocm where MIGraphX API is installed
-                ep_flags += ' --migraphx_home "/opt/rocm"'
+            # MIGraphX is already installed in base image at /opt/rocm
+            ep_flags += ' --migraphx_home "/opt/rocm"'
         cmake_defs = "CMAKE_HIP_COMPILER"
         cuda_archs = "/opt/rocm/llvm/bin/clang++"
         
@@ -597,8 +594,8 @@ RUN export CXXFLAGS="-D__HIP_PLATFORM_AMD__=1 -w"
             ep_flags += ' --rocm_home {}'.format(FLAGS.rocm_home)
         if FLAGS.ort_migraphx:
             ep_flags += " --use_migraphx"
-            if FLAGS.migraphx_home is not None:
-                ep_flags += ' --migraphx_home {}'.format(FLAGS.migraphx_home)
+            # MIGraphX is already installed in base image at /opt/rocm
+            ep_flags += ' --migraphx_home /opt/rocm'
 
         ep_flags += " --allow_running_as_root"
 
@@ -734,9 +731,7 @@ def preprocess_gpu_flags():
         if FLAGS.enable_rocm:
             if FLAGS.rocm_home is None:
                 FLAGS.rocm_home = "/opt/rocm"
-
-            if FLAGS.migraphx_home is None:
-                FLAGS.migraphx_home = "/opt/rocm"
+            # MIGraphX is already installed in base image at /opt/rocm
 
 
 
