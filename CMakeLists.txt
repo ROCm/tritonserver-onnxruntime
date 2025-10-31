@@ -201,13 +201,14 @@ else()
   if(NOT TRITON_BUILD_CONTAINER)
     if (TRITON_ENABLE_ROCM)
       if (TRITON_LINUX_DISTRO STREQUAL "debian")
-        # Use Debian 12 + ROCm + Python 3.10 base image
+        # Use Debian 12 + ROCm + Python 3.10 base image with pre-built MIGraphX and ONNX Runtime
         set(TRITON_BUILD_CONTAINER "local/rocm7.0_debian12_ort1.22_py310")
       else()
         # Use ROCm ONNX Runtime container which includes ORT 1.22 and MIGraphX
         set(TRITON_BUILD_CONTAINER "rocm/onnxruntime:rocm7.0_ub22.04_ort1.22_torch2.8.0")
       endif()
-      set(TRITON_ONNXRUNTIME_INCLUDE_PATHS ${TRITON_ONNXRUNTIME_INCLUDE_PATHS} /opt/rocm/include/hip /tmp/tritonbuild/onnxruntime_backend/build/onnxruntime/include)
+      # Add ROCm and HIP include paths
+      set(TRITON_ONNXRUNTIME_INCLUDE_PATHS ${TRITON_ONNXRUNTIME_INCLUDE_PATHS} /opt/rocm/include/hip)
     else()
       set(TRITON_BUILD_CONTAINER "nvcr.io/nvidia/tritonserver:${TRITON_BUILD_CONTAINER_VERSION}-py3-min")
     endif()

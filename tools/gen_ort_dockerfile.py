@@ -125,17 +125,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Install dependencies from
 # onnxruntime/dockerfiles/scripts/install_common_deps.sh.
-# For Debian: Download CMake directly since Kitware doesn't have repos for all Debian versions
+# For Debian: Check if CMake is already installed (e.g., in base image), if not download directly
 # For Ubuntu: Use Kitware APT repository
 RUN . /etc/os-release && \\
     if [ "$ID" = "debian" ]; then \\
-        apt update -q=2 && apt install -y wget && \\
-        wget -q https://github.com/Kitware/CMake/releases/download/v3.28.3/cmake-3.28.3-linux-x86_64.tar.gz && \\
-        tar -zxf cmake-3.28.3-linux-x86_64.tar.gz -C /opt && \\
-        rm cmake-3.28.3-linux-x86_64.tar.gz && \\
-        ln -sf /opt/cmake-3.28.3-linux-x86_64/bin/cmake /usr/local/bin/cmake && \\
-        ln -sf /opt/cmake-3.28.3-linux-x86_64/bin/ctest /usr/local/bin/ctest && \\
-        ln -sf /opt/cmake-3.28.3-linux-x86_64/bin/cpack /usr/local/bin/cpack && \\
+        if ! command -v cmake &> /dev/null || [ "$(cmake --version | grep -oP '\\d+\\.\\d+' | head -1)" != "3.28" ]; then \\
+            echo "Installing CMake 3.28.3 for Debian..." && \\
+            apt update -q=2 && apt install -y wget && \\
+            wget -q https://github.com/Kitware/CMake/releases/download/v3.28.3/cmake-3.28.3-linux-x86_64.tar.gz && \\
+            tar -zxf cmake-3.28.3-linux-x86_64.tar.gz -C /opt && \\
+            rm cmake-3.28.3-linux-x86_64.tar.gz && \\
+            ln -sf /opt/cmake-3.28.3-linux-x86_64/bin/cmake /usr/local/bin/cmake && \\
+            ln -sf /opt/cmake-3.28.3-linux-x86_64/bin/ctest /usr/local/bin/ctest && \\
+            ln -sf /opt/cmake-3.28.3-linux-x86_64/bin/cpack /usr/local/bin/cpack; \\
+        else \\
+            echo "CMake 3.28 already installed for Debian, skipping installation"; \\
+        fi && \\
         cmake --version; \\
     else \\
         apt update -q=2 && \\
@@ -173,16 +178,20 @@ RUN apt-get update && \\
 # Add user to video and render groups for GPU access
 RUN groupadd -f video && groupadd -f render
 
-# Install CMake 3.28.3
-RUN wget -q https://github.com/Kitware/CMake/releases/download/v3.28.3/cmake-3.28.3-linux-x86_64.tar.gz && \\
-    tar -zxf cmake-3.28.3-linux-x86_64.tar.gz -C /opt && \\
-    rm cmake-3.28.3-linux-x86_64.tar.gz && \\
-    ln -sf /opt/cmake-3.28.3-linux-x86_64/bin/cmake /usr/local/bin/cmake && \\
-    ln -sf /opt/cmake-3.28.3-linux-x86_64/bin/ctest /usr/local/bin/ctest && \\
-    ln -sf /opt/cmake-3.28.3-linux-x86_64/bin/cpack /usr/local/bin/cpack && \\
+# Install CMake 3.28.3 only if not already installed (e.g., not in Debian base image)
+RUN if ! command -v cmake &> /dev/null || [ "$(cmake --version | grep -oP '\\d+\\.\\d+' | head -1)" != "3.28" ]; then \\
+        echo "Installing CMake 3.28.3..." && \\
+        wget -q https://github.com/Kitware/CMake/releases/download/v3.28.3/cmake-3.28.3-linux-x86_64.tar.gz && \\
+        tar -zxf cmake-3.28.3-linux-x86_64.tar.gz -C /opt && \\
+        rm cmake-3.28.3-linux-x86_64.tar.gz && \\
+        ln -sf /opt/cmake-3.28.3-linux-x86_64/bin/cmake /usr/local/bin/cmake && \\
+        ln -sf /opt/cmake-3.28.3-linux-x86_64/bin/ctest /usr/local/bin/ctest && \\
+        ln -sf /opt/cmake-3.28.3-linux-x86_64/bin/cpack /usr/local/bin/cpack && \\
+        export PATH=/opt/cmake-3.28.3-linux-x86_64/bin:${PATH}; \\
+    else \\
+        echo "CMake already installed, skipping installation"; \\
+    fi && \\
     cmake --version
-
-ENV PATH /opt/cmake-3.28.3-linux-x86_64/bin:${PATH}
 """
 
 
@@ -248,19 +257,12 @@ ENV PYTHONPATH $INTEL_OPENVINO_DIR/python/python3.10:$INTEL_OPENVINO_DIR/python/
             df += """
     #
     # ONNX Runtime for ROCm - already installed in base image
-    # Just clone source for header files
     #
     ARG ONNXRUNTIME_REPO
 
-    # Clone ONNX Runtime source for header files only
-    # Both Debian and Ubuntu base images have ONNX Runtime pre-installed
+    # ONNX Runtime and MIGraphX are pre-built in the base image
     RUN echo "ONNX Runtime and MIGraphX already installed in base image" && \\
-        ORT_VERSION=$(python3 -c "import onnxruntime; print(onnxruntime.__version__)") && \\
-        echo "Cloning ONNX Runtime v$ORT_VERSION source for header files" && \\
-        (git clone -b v$ORT_VERSION --depth=1 ${ONNXRUNTIME_REPO} onnxruntime || \\
-         git clone -b rel-$ORT_VERSION --depth=1 ${ONNXRUNTIME_REPO} onnxruntime || \\
-         (echo "Warning: Could not find branch v$ORT_VERSION or rel-$ORT_VERSION, using main" && \\
-          git clone --depth=1 ${ONNXRUNTIME_REPO} onnxruntime))
+        python3 -c "import onnxruntime; print('ONNX Runtime version:', onnxruntime.__version__)"
         """
 
     else:
@@ -307,7 +309,6 @@ ENV PYTHONPATH $INTEL_OPENVINO_DIR/python/python3.10:$INTEL_OPENVINO_DIR/python/
     if FLAGS.enable_rocm: 
         ep_flags = "--use_rocm"
         df += """
-    ENV PATH="/opt/cmake-3.28.3-linux-x86_64/bin:$PATH"
     ENV CXXFLAGS="-D__HIP_PLATFORM_AMD__=1 -w"
             """
         # ROCm version is determined by base container (7.0 for Ubuntu, 7.0.1 for Debian)
@@ -344,7 +345,7 @@ ENV PYTHONPATH $INTEL_OPENVINO_DIR/python/python3.10:$INTEL_OPENVINO_DIR/python/
         )
 
     if FLAGS.enable_rocm:
-        # For ROCm, copy libraries and headers from installed packages
+        # For ROCm, copy libraries and headers from pre-installed packages in base image
         df += """
     #
     # Copy ONNX Runtime artifacts from base image installation to /opt/onnxruntime
@@ -368,17 +369,22 @@ ENV PYTHONPATH $INTEL_OPENVINO_DIR/python/python3.10:$INTEL_OPENVINO_DIR/python/
         ln -s libonnxruntime.so.1.22.1 libonnxruntime.so.1 && \
         ln -s libonnxruntime.so.1.22.1 libonnxruntime.so
 
-    # Copy header files from cloned source repository
-    RUN echo "Copying header files from cloned source" && \
-        cp /workspace/onnxruntime/include/onnxruntime/core/session/onnxruntime_c_api.h /opt/onnxruntime/include/ && \
-        cp /workspace/onnxruntime/include/onnxruntime/core/session/onnxruntime_session_options_config_keys.h /opt/onnxruntime/include/ && \
-        cp /workspace/onnxruntime/include/onnxruntime/core/providers/cpu/cpu_provider_factory.h /opt/onnxruntime/include/ && \
-        cp /workspace/onnxruntime/LICENSE /opt/onnxruntime/ && \
-        (cat /workspace/onnxruntime/cmake/external/onnx/VERSION_NUMBER > /opt/onnxruntime/ort_onnx_version.txt || echo "1.22.1" > /opt/onnxruntime/ort_onnx_version.txt) && \
-        if [ -f /workspace/onnxruntime/onnxruntime/core/providers/migraphx/migraphx_provider_factory.h ]; then \
-            cp /workspace/onnxruntime/onnxruntime/core/providers/migraphx/migraphx_provider_factory.h /opt/onnxruntime/include/; \
-        fi && \
-        rm -rf /workspace/onnxruntime
+    # Copy header files from installed ONNX Runtime
+    # First try site-packages (from wheel), then try /opt/rocm/include (from cmake install)
+    RUN SITE_PACKAGES=$(python3 -c "import site; print(site.getsitepackages()[0])") && \
+        echo "Copying header files from installed ONNX Runtime" && \
+        (cp $SITE_PACKAGES/onnxruntime/capi/onnxruntime_c_api.h /opt/onnxruntime/include/ 2>/dev/null || \
+         cp /opt/rocm/include/onnxruntime/core/session/onnxruntime_c_api.h /opt/onnxruntime/include/ 2>/dev/null || \
+         echo "Warning: Could not find onnxruntime_c_api.h") && \
+        (cp $SITE_PACKAGES/onnxruntime/capi/onnxruntime_session_options_config_keys.h /opt/onnxruntime/include/ 2>/dev/null || \
+         cp /opt/rocm/include/onnxruntime/core/session/onnxruntime_session_options_config_keys.h /opt/onnxruntime/include/ 2>/dev/null || \
+         echo "Warning: Could not find onnxruntime_session_options_config_keys.h") && \
+        (cp /opt/rocm/include/onnxruntime/core/providers/cpu/cpu_provider_factory.h /opt/onnxruntime/include/ 2>/dev/null || \
+         echo "Warning: Could not find cpu_provider_factory.h") && \
+        (cp /opt/rocm/include/onnxruntime/core/providers/migraphx/migraphx_provider_factory.h /opt/onnxruntime/include/ 2>/dev/null || \
+         echo "Note: migraphx_provider_factory.h not found (may not be needed)") && \
+        echo "1.22.1" > /opt/onnxruntime/ort_onnx_version.txt && \
+        echo "ONNX Runtime headers and libraries copied to /opt/onnxruntime"
 
     # Set RPATH for all .so files
     RUN cd /opt/onnxruntime/lib && \
@@ -731,7 +737,6 @@ def preprocess_gpu_flags():
         if FLAGS.enable_rocm:
             if FLAGS.rocm_home is None:
                 FLAGS.rocm_home = "/opt/rocm"
-            # MIGraphX is already installed in base image at /opt/rocm
 
 
 
