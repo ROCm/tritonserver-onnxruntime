@@ -558,19 +558,18 @@ ModelState::LoadModel(
 #endif  // TRITON_ENABLE_ONNXRUNTIME_TENSORRT
 #ifdef TRITON_ENABLE_ONNXRUNTIME_MIGRAPHX
             if (name == kMIGraphXExecutionAccelerator) {
-              // create MIGraphX options with default values
+              // create MIGraphX options with default values (ORT 1.22.1 API)
               std::string int8_calibration_table_name;
               OrtMIGraphXProviderOptions migx_options{
                   instance_group_device_id,
                   0,        // migraphx_fp16_enable
+                  0,        // migraphx_bf16_enable
+                  0,        // migraphx_fp8_enable
                   0,        // migraphx_int8_enable
                   0,        // migraphx_use_native_calibration_table
                   nullptr,  // migraphx_int8_calibration_table_name
-                  0,        // migraphx_save_compiled_model
-                  nullptr,  // migraphx_save_model_path
-                  0,        // migraphx_load_compiled_model
-                  nullptr,  // migraphx_load_model_path
-                  0,        // migraphx_exhaustive_tune
+                  nullptr,  // migraphx_cache_dir
+                  false,    // migraphx_exhaustive_tune
               };
               // Validate and set parameters
               triton::common::TritonJson::Value params;
