@@ -369,19 +369,11 @@ ENV PYTHONPATH $INTEL_OPENVINO_DIR/python/python3.10:$INTEL_OPENVINO_DIR/python/
         ln -s libonnxruntime.so.1.22.1 libonnxruntime.so
 
     # Copy header files from installed ONNX Runtime
-    # First try site-packages (from wheel), then try /opt/rocm/include (from cmake install)
-    RUN SITE_PACKAGES=$(python3 -c "import site; print(site.getsitepackages()[0])") && \
-        echo "Copying header files from installed ONNX Runtime" && \
-        (cp $SITE_PACKAGES/onnxruntime/capi/onnxruntime_c_api.h /opt/onnxruntime/include/ 2>/dev/null || \
-         cp /opt/rocm/include/onnxruntime/core/session/onnxruntime_c_api.h /opt/onnxruntime/include/ 2>/dev/null || \
-         echo "Warning: Could not find onnxruntime_c_api.h") && \
-        (cp $SITE_PACKAGES/onnxruntime/capi/onnxruntime_session_options_config_keys.h /opt/onnxruntime/include/ 2>/dev/null || \
-         cp /opt/rocm/include/onnxruntime/core/session/onnxruntime_session_options_config_keys.h /opt/onnxruntime/include/ 2>/dev/null || \
-         echo "Warning: Could not find onnxruntime_session_options_config_keys.h") && \
-        (cp /opt/rocm/include/onnxruntime/core/providers/cpu/cpu_provider_factory.h /opt/onnxruntime/include/ 2>/dev/null || \
-         echo "Warning: Could not find cpu_provider_factory.h") && \
-        (cp /opt/rocm/include/onnxruntime/core/providers/migraphx/migraphx_provider_factory.h /opt/onnxruntime/include/ 2>/dev/null || \
-         echo "Note: migraphx_provider_factory.h not found (may not be needed)") && \
+    # Headers are in /opt/rocm/include/onnxruntime/ (from cmake install)
+    RUN echo "Copying header files from /opt/rocm/include/onnxruntime/" && \
+        cp /opt/rocm/include/onnxruntime/onnxruntime_c_api.h /opt/onnxruntime/include/ && \
+        cp /opt/rocm/include/onnxruntime/onnxruntime_session_options_config_keys.h /opt/onnxruntime/include/ && \
+        cp /opt/rocm/include/onnxruntime/cpu_provider_factory.h /opt/onnxruntime/include/ && \
         echo "1.22.1" > /opt/onnxruntime/ort_onnx_version.txt && \
         echo "ONNX Runtime headers and libraries copied to /opt/onnxruntime"
 
