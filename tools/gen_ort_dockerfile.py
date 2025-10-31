@@ -363,7 +363,6 @@ ENV PYTHONPATH $INTEL_OPENVINO_DIR/python/python3.10:$INTEL_OPENVINO_DIR/python/
         echo "Found site-packages at: $SITE_PACKAGES" && \
         cp $SITE_PACKAGES/onnxruntime/capi/libonnxruntime.so.* /opt/onnxruntime/lib/ && \
         cp $SITE_PACKAGES/onnxruntime/capi/libonnxruntime_providers_shared.so /opt/onnxruntime/lib/ && \
-        cp $SITE_PACKAGES/onnxruntime/capi/libonnxruntime_providers_rocm.so /opt/onnxruntime/lib/ && \
         cp $SITE_PACKAGES/onnxruntime/capi/libonnxruntime_providers_migraphx.so /opt/onnxruntime/lib/ && \
         cd /opt/onnxruntime/lib && \
         ln -s libonnxruntime.so.1.22.1 libonnxruntime.so.1 && \
