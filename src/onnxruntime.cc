@@ -570,6 +570,8 @@ ModelState::LoadModel(
                   nullptr,  // migraphx_int8_calibration_table_name
                   nullptr,  // migraphx_cache_dir
                   false,    // migraphx_exhaustive_tune
+                  SIZE_MAX, // migraphx_mem_limit (use all available memory)
+                  0,        // migraphx_arena_extend_strategy (0 = kNextPowerOfTwo)
               };
               // Validate and set parameters
               triton::common::TritonJson::Value params;
