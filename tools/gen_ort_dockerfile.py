@@ -365,8 +365,8 @@ ENV PYTHONPATH $INTEL_OPENVINO_DIR/python/python3.10:$INTEL_OPENVINO_DIR/python/
         cp $SITE_PACKAGES/onnxruntime/capi/libonnxruntime_providers_shared.so /opt/onnxruntime/lib/ && \
         cp $SITE_PACKAGES/onnxruntime/capi/libonnxruntime_providers_migraphx.so /opt/onnxruntime/lib/ && \
         cd /opt/onnxruntime/lib && \
-        ln -s libonnxruntime.so.1.22.1 libonnxruntime.so.1 && \
-        ln -s libonnxruntime.so.1.22.1 libonnxruntime.so
+        ln -s libonnxruntime.so.1.23.1 libonnxruntime.so.1 && \
+        ln -s libonnxruntime.so.1.23.1 libonnxruntime.so
 
     # Copy header files from installed ONNX Runtime
     # Headers are in /opt/rocm/include/onnxruntime/ (from cmake install)
@@ -374,7 +374,7 @@ ENV PYTHONPATH $INTEL_OPENVINO_DIR/python/python3.10:$INTEL_OPENVINO_DIR/python/
         cp /opt/rocm/include/onnxruntime/onnxruntime_c_api.h /opt/onnxruntime/include/ && \
         cp /opt/rocm/include/onnxruntime/onnxruntime_session_options_config_keys.h /opt/onnxruntime/include/ && \
         cp /opt/rocm/include/onnxruntime/cpu_provider_factory.h /opt/onnxruntime/include/ && \
-        echo "1.22.1" > /opt/onnxruntime/ort_onnx_version.txt && \
+        echo "1.23.1" > /opt/onnxruntime/ort_onnx_version.txt && \
         echo "ONNX Runtime headers and libraries copied to /opt/onnxruntime"
 
     # Set RPATH for all .so files
