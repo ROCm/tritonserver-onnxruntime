@@ -558,8 +558,9 @@ ModelState::LoadModel(
 #endif  // TRITON_ENABLE_ONNXRUNTIME_TENSORRT
 #ifdef TRITON_ENABLE_ONNXRUNTIME_MIGRAPHX
             if (name == kMIGraphXExecutionAccelerator) {
-              // create MIGraphX options with default values (ORT 1.22.1 API)
+              // create MIGraphX options with default values (ORT 1.23.1 API)
               std::string int8_calibration_table_name;
+              std::string model_cache_dir;
               OrtMIGraphXProviderOptions migx_options{
                   instance_group_device_id,
                   0,        // migraphx_fp16_enable
@@ -594,7 +595,7 @@ ModelState::LoadModel(
                               value_string + "' is requested");
                     }
                   } else if (param_key == "int8_calibration_table_name") {
-                    return_if_error(params.MemberAsstring(
+                    return_if_error(params.MemberAsString(
                         param_key.c_str(), &int8_calibration_table_name));
                     migx_options.migraphx_int8_calibration_table_name =
                         int8_calibration_table_name.c_str();
@@ -608,11 +609,10 @@ ModelState::LoadModel(
                         use_native_calibration_table;
                   } else if (param_key == "migraphx_model_cache_dir") {
                     return_if_error(params.MemberAsString(
-                        param_key.c_str(), &int8_calibration_table_name));
-                    migx_options.migraphx_int8_calibration_table_name =
-                        int8_calibration_table_name.c_str();
-                  else {
-
+                        param_key.c_str(), &model_cache_dir));
+                    migx_options.migraphx_model_cache_dir =
+                        model_cache_dir.c_str();
+                  } else {
                     return TRITONSERVER_ErrorNew(
                         TRITONSERVER_ERROR_INVALID_ARG,
                         std::string(
