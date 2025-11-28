@@ -372,6 +372,7 @@ ENV PYTHONPATH $INTEL_OPENVINO_DIR/python/python3.10:$INTEL_OPENVINO_DIR/python/
     # Headers are in /opt/rocm/include/onnxruntime/ (from cmake install)
     RUN echo "Copying header files from /opt/rocm/include/onnxruntime/" && \
         cp /opt/rocm/include/onnxruntime/onnxruntime_c_api.h /opt/onnxruntime/include/ && \
+        cp /opt/rocm/include/onnxruntime/onnxruntime_ep_c_api.h /opt/onnxruntime/include/ && \
         cp /opt/rocm/include/onnxruntime/onnxruntime_session_options_config_keys.h /opt/onnxruntime/include/ && \
         cp /opt/rocm/include/onnxruntime/cpu_provider_factory.h /opt/onnxruntime/include/ && \
         echo "1.23.1" > /opt/onnxruntime/ort_onnx_version.txt && \
