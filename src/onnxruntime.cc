@@ -595,7 +595,7 @@ ModelState::LoadModel(
                               value_string + "' is requested");
                     }
                   } else if (param_key == "int8_calibration_table_name") {
-                    return_if_error(params.MemberAsString(
+                    RETURN_IF_ERROR(params.MemberAsString(
                         param_key.c_str(), &int8_calibration_table_name));
                     migx_options.migraphx_int8_calibration_table_name =
                         int8_calibration_table_name.c_str();
@@ -608,9 +608,9 @@ ModelState::LoadModel(
                     migx_options.migraphx_use_native_calibration_table =
                         use_native_calibration_table;
                   } else if (param_key == "migraphx_model_cache_dir") {
-                    return_if_error(params.MemberAsString(
+                    RETURN_IF_ERROR(params.MemberAsString(
                         param_key.c_str(), &model_cache_dir));
-                    migx_options.migraphx_model_cache_dir =
+                    migx_options.migraphx_cache_dir =
                         model_cache_dir.c_str();
                   } else {
                     return TRITONSERVER_ErrorNew(
