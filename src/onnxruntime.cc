@@ -612,6 +612,14 @@ ModelState::LoadModel(
                         param_key.c_str(), &model_cache_dir));
                     migx_options.migraphx_cache_dir =
                         model_cache_dir.c_str();
+                  } else if (param_key == "migraphx_exhaustive_tune") {
+                    std::string value_string;
+                    RETURN_IF_ERROR(params.MemberAsString(
+                        param_key.c_str(), &value_string));
+                    if (value_string == "true")
+                    {
+                      migx_options.migraphx_exhaustive_tune = true;
+                    }
                   } else {
                     return TRITONSERVER_ErrorNew(
                         TRITONSERVER_ERROR_INVALID_ARG,
