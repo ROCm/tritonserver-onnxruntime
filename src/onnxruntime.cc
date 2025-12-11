@@ -586,6 +586,10 @@ ModelState::LoadModel(
                         param_key.c_str(), &value_string));
                     if (value_string == "FP16") {
                       migx_options.migraphx_fp16_enable = 1;
+                    } else if (value_string == "BF16") {
+                      migx_options.migraphx_bf16_enable = 1;
+                    } else if (value_string == "FP8") {
+                      migx_options.migraphx_fp8_enable = 1;
                     } else if (value_string == "INT8") {
                       migx_options.migraphx_int8_enable = 1;
                     } else if (value_string != "FP32") {
