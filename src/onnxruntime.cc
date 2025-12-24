@@ -573,6 +573,7 @@ ModelState::LoadModel(
                   false,    // migraphx_exhaustive_tune
                   SIZE_MAX, // migraphx_mem_limit (use all available memory)
                   0,        // migraphx_arena_extend_strategy (0 = kNextPowerOfTwo)
+                  0,        // migraphx_max_dynamic_batch (0 = no dynamic batch)
               };
               // Validate and set parameters
               triton::common::TritonJson::Value params;
