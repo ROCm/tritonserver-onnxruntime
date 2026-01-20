@@ -561,20 +561,21 @@ ModelState::LoadModel(
               // create MIGraphX options with default values (ORT 1.23.1 API)
               std::string int8_calibration_table_name;
               std::string model_cache_dir;
-              OrtMIGraphXProviderOptions migx_options{
-                  instance_group_device_id,
-                  0,        // migraphx_fp16_enable
-                  0,        // migraphx_bf16_enable
-                  0,        // migraphx_fp8_enable
-                  0,        // migraphx_int8_enable
-                  0,        // migraphx_use_native_calibration_table
-                  nullptr,  // migraphx_int8_calibration_table_name
-                  nullptr,  // migraphx_cache_dir
-                  false,    // migraphx_exhaustive_tune
-                  SIZE_MAX, // migraphx_mem_limit (use all available memory)
-                  0,        // migraphx_arena_extend_strategy (0 = kNextPowerOfTwo)
-                  0,        // migraphx_max_dynamic_batch (0 = no dynamic batch)
-              };
+              OrtMIGraphXProviderOptions migx_options{};
+
+              migx_options.device_id =    instance_group_device_id;
+              migx_options.migraphx_fp16_enable = 0;
+              migx_options.migraphx_bf16_enable = 0;
+              migx_options.migraphx_fp8_enable = 0;
+              migx_options.migraphx_int8_enable = 0;
+              migx_options.migraphx_use_native_calibration_table = 0;
+              migx_options.migraphx_int8_calibration_table_name = nullptr;
+              migx_options.migraphx_cache_dir = nullptr;
+              migx_options.migraphx_exhaustive_tune = false;
+              migx_options.migraphx_mem_limit = SIZE_MAX;
+              migx_options.migraphx_arena_extend_strategy = 0;
+              migx_options.migraphx_max_dynamic_batch = 0;
+
               // Validate and set parameters
               triton::common::TritonJson::Value params;
               if (ea.Find("parameters", &params)) {
