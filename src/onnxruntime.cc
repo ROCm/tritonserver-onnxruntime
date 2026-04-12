@@ -1605,6 +1605,11 @@ ModelInstanceState::ModelInstanceState(
     }
   }
 
+#ifdef TRITON_ENABLE_ONNXRUNTIME_MIGRAPHX
+  THROW_IF_BACKEND_MODEL_ORT_ERROR(ort_api->AddRunConfigEntry(
+      runOptions_, "disable_synchronize_execution_providers", "1"));
+#endif  // TRITON_ENABLE_ONNXRUNTIME_MIGRAPHX
+
   size_t expected_input_cnt = 0;
   {
     triton::common::TritonJson::Value inputs;
